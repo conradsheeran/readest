@@ -93,6 +93,25 @@ fork makes, including the ones that turned out to need no patch at all. Read it
 before concluding that something requires source surgery — several obvious
 candidates do not.
 
+## Commit shape
+
+**One patch, one commit.** This is a rule, not a style preference — the rebase
+workflow depends on it. `git log upstream..main` has to read as an ordered list of
+single-purpose changes, because that list is what a rebase replays and what the
+next agent reads to understand the fork. A commit that carries two patches cannot
+be reordered, reverted, or dropped independently, and a conflict in one half
+blocks the other.
+
+Conventions that follow from that:
+
+- Name the commit after the ledger ID: `patch(P4): remove the upgrade entry from
+  the settings menu`.
+- Put the ledger status change (`not applied` → `applied`) in the **same commit**
+  as the patch. A ledger that disagrees with the diff is worse than no ledger.
+- Keep `deploy/` changes in their own commits, separate from patches.
+- Never mix a patch with a refactor of the surrounding upstream code. The diff
+  against upstream is read on every upgrade; noise in it is paid for repeatedly.
+
 ## Document map
 
 | File | Read it when |
