@@ -246,23 +246,25 @@ flipping their master switches, which is P1.
 
 ### P7 — Delete upstream's workflows
 
-- **Target**: `.github/workflows/` — all nine files: `android-e2e`, `codeql`,
-  `docker-image`, `nightly`, `pull-request`, `release`, `scorecard`,
-  `upload-to-r2`, `vercel-merge`.
+- **Target**: `.github/workflows/` — all thirteen upstream files:
+  `android-e2e`, `codeql`, `docker-image`, `nightly`, `nix-build`,
+  `nix-deps-check`, `nix-update-inputs`, `pull-request`, `release`, `scorecard`,
+  `try-appimage`, `upload-to-r2`, `vercel-merge`.
 - **Change**: delete them. Only `selfhost-*.yml` remain.
-- **Effect**: stops upstream CI from firing in this fork. Five of the nine
+- **Effect**: stops upstream CI from firing in this fork. Five of the thirteen
   trigger on `push` to `main`. Worse, `release.yml` and `docker-image.yml`
   trigger on `release: published`, which is exactly what a selfhost release does
   — and `release.yml` alone is a seven-leg matrix of up-to-60-minute platform
   builds that would every one of them fail for want of upstream's signing
-  secrets.
+  secrets. The four Nix/AppImage workflows added between v0.12.1 and v0.12.20
+  are removed for the same reason.
 - **Why not the GitHub UI**: disabling workflows there leaves no trace in git. It
   is invisible to an agent, lost if the fork is ever recreated, and silently
   bypassed the moment an upstream release adds a new workflow file.
 - **Conflict risk**: **medium**, but mechanical. When upstream edits a file we
   deleted, the rebase reports a delete/modify conflict. The resolution is always
   `git rm` — keep it deleted — and `git rerere` remembers it.
-- **Status**: not applied
+- **Status**: applied
 
 ### P8 — Make the client-side storage type reachable in Tauri builds
 
