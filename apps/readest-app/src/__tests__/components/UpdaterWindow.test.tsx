@@ -125,68 +125,27 @@ afterEach(() => {
 });
 
 describe('UpdaterContent — auto-translated changelog', () => {
-  it('contains a stable Android download failure and does not install a partial APK', async () => {
+  // P9 (deploy/docs/patch-ledger.md) retires the in-app updater: UpdaterContent
+  // no longer reads a release manifest or downloads an official APK. With no
+  // update to consume, the button is inert and no partial install can run.
+  it('does not download or install an official APK', async () => {
     mockOS = 'android';
-    const failure = new Error('Response stream interrupted');
-    vi.spyOn(console, 'error').mockImplementation(() => {});
-    vi.mocked(tauriDownload).mockRejectedValueOnce(failure);
-    vi.mocked(window.fetch).mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
-        version: '0.11.20',
-        platforms: { 'android-arm64': { url: 'https://example.com/update.apk' } },
-      }),
-    } as Response);
-
     render(<UpdaterContent latestVersion='0.11.20' />);
-    fireEvent.click(await screen.findByRole('button', { name: 'DOWNLOAD & INSTALL' }));
 
-    expect(await screen.findByText('Failed to download and install update')).toBeTruthy();
-    expect(tauriDownload).toHaveBeenCalledOnce();
+    const button = await screen.findByRole('button', { name: 'DOWNLOAD & INSTALL' });
+    expect(button.className).toContain('btn-disabled');
+    fireEvent.click(button);
+
+    expect(tauriDownload).not.toHaveBeenCalled();
     expect(installPackage).not.toHaveBeenCalled();
+    expect(vi.mocked(window.fetch)).not.toHaveBeenCalledWith('https://example.com/latest.json');
+    expect(screen.queryByText('Failed to download and install update')).toBeNull();
   });
 
-  // The manifest as release.yml publishes it after the per-ABI split, including
-  // the android-universal alias kept for pre-split clients.
-  const SPLIT_MANIFEST = {
-    version: '0.11.20',
-    platforms: {
-      'android-arm64': { url: 'https://example.com/Readest_0.11.20_arm64.apk' },
-      'android-armv7': { url: 'https://example.com/Readest_0.11.20_armv7.apk' },
-      'android-legacy': { url: 'https://example.com/Readest_0.11.20_legacy.apk' },
-      'android-universal': { url: 'https://example.com/Readest_0.11.20_armv7.apk' },
-    },
-  };
-
-  it.each([
-    ['aarch64', 'arm64'],
-    ['arm', 'armv7'],
-    ['x86_64', 'legacy'],
-    ['x86', 'legacy'],
-  ])('on %s downloads the %s APK', async (arch, abi) => {
-    mockOS = 'android';
-    mockArch = arch;
-    vi.spyOn(console, 'error').mockImplementation(() => {});
-    vi.mocked(tauriDownload).mockRejectedValueOnce(new Error('stop'));
-    vi.mocked(window.fetch).mockResolvedValueOnce({
-      ok: true,
-      json: async () => SPLIT_MANIFEST,
-    } as Response);
-
-    render(<UpdaterContent latestVersion='0.11.20' />);
-    fireEvent.click(await screen.findByRole('button', { name: 'DOWNLOAD & INSTALL' }));
-
-    await waitFor(() => expect(tauriDownload).toHaveBeenCalledOnce());
-    expect(vi.mocked(tauriDownload).mock.calls[0]!.slice(0, 2)).toEqual([
-      `https://example.com/Readest_0.11.20_${abi}.apk`,
-      `/cache/Readest_0.11.20_${abi}.apk`,
-    ]);
-  });
-
-  it('contains download failures and shows an updater error', async () => {
-    const failure = 'Download request failed with status: 403 Forbidden';
+  // P9 (deploy/docs/patch-ledger.md) stops consuming `nightlyUpdate`, so a
+  // caller that still passes one gets no installer run and no error.
+  it('ignores a nightlyUpdate instead of running the official installer', async () => {
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
-    mockInstallNightlyUpdate.mockRejectedValueOnce(failure);
 
     render(
       <UpdaterContent
@@ -203,10 +162,10 @@ describe('UpdaterContent — auto-translated changelog', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: 'DOWNLOAD & INSTALL' }));
 
-    await waitFor(() => {
-      expect(screen.getByText('Failed to download and install update')).toBeTruthy();
-    });
-    expect(consoleError).toHaveBeenCalledWith('Failed to download and install update:', failure);
+    expect(mockInstallNightlyUpdate).not.toHaveBeenCalled();
+    expect(tauriDownload).not.toHaveBeenCalled();
+    expect(consoleError).not.toHaveBeenCalled();
+    expect(screen.queryByText('Failed to download and install update')).toBeNull();
   });
 
   it('shows a "Show original" toggle that swaps the translation for the source English', async () => {

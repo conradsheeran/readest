@@ -314,9 +314,13 @@ flipping their master switches, which is P1.
   single-operator deployment where the APK is installed by hand anyway, the
   updater has no value to justify that.
 - **Why not configuration**: the URLs are constants with no environment hook.
+- **Tests**: `src/__tests__/components/UpdaterWindow.test.tsx` asserts that the
+  download button starts no download and installs no APK, that a `nightlyUpdate`
+  passed by an old caller is ignored, and that the changelog auto-translation
+  toggle still works.
 - **Conflict risk**: **medium.** Two files, and the updater is occasionally
   reworked upstream. Re-apply by intent: find the manifest fetch, stop it.
-- **Status**: not applied
+- **Status**: applied
 
 ---
 
