@@ -468,28 +468,34 @@ describe('VocabularyView Anki link', () => {
     dispatch.mockRestore();
   });
 
-  it('does not pull on open without access, or for a free account', async () => {
+  it('pulls on open only once AnkiDroid access is granted, even for a free account', async () => {
     anki.ankiStatus.mockResolvedValue({ installed: true, granted: false });
     renderWithMenu();
     await syncButton();
     await settle();
+    // Not granted: the read-only pull on open stays quiet and never asks.
+    expect(anki.ankiListDecks).not.toHaveBeenCalled();
+    expect(anki.ankiRequestPermission).not.toHaveBeenCalled();
     cleanup();
     anki.ankiStatus.mockResolvedValue({ installed: true, granted: true });
     account.plan = 'free';
     renderWithMenu();
     await syncButton();
     await settle();
-    expect(anki.ankiListDecks).not.toHaveBeenCalled();
+    // P1 (deploy/docs/patch-ledger.md) flips ANKI_REQUIRES_PREMIUM off, so a
+    // free account is entitled and the pull on open runs.
+    expect(anki.ankiListDecks).toHaveBeenCalled();
     expect(anki.ankiRequestPermission).not.toHaveBeenCalled();
   });
 
-  it('pulls once on open when the plan arrives after AnkiDroid answers', async () => {
+  it('pulls once on open even while the plan is still loading', async () => {
     account.plan = undefined;
     const view = renderWithMenu();
     await syncButton();
     await settle();
-    expect(anki.ankiListDecks).not.toHaveBeenCalled();
-    account.plan = 'plus';
+    // P1 (deploy/docs/patch-ledger.md) flips ANKI_REQUIRES_PREMIUM off, so the
+    // gate no longer waits for the plan to resolve.
+    expect(anki.ankiListDecks).toHaveBeenCalledTimes(1);
     for (let i = 0; i < 2; i++) {
       view.rerender(
         <DropdownProvider>
@@ -498,6 +504,7 @@ describe('VocabularyView Anki link', () => {
       );
       await settle();
     }
+    // Still only the one pull: `pulledOnOpen` dedupes.
     expect(anki.ankiListDecks).toHaveBeenCalledTimes(1);
   });
 
@@ -513,18 +520,22 @@ describe('VocabularyView Anki link', () => {
     expect(anki.ankiStatus).toHaveBeenCalledTimes(3);
   });
 
-  it('sends a free account to the plans page instead of syncing', async () => {
+  // P1 (deploy/docs/patch-ledger.md) flips ANKI_REQUIRES_PREMIUM off, so a free
+  // account syncs instead of being sent to the plans page.
+  it('syncs for a free account instead of sending it to the plans page', async () => {
     account.plan = 'free';
     renderWithMenu();
     const sync = await syncButton();
     expect(sync.textContent).not.toContain('Premium');
     fireEvent.click(sync);
-    expect(push).toHaveBeenCalledWith(expect.stringContaining('/user?redirect='));
+    await waitFor(() => expect(anki.ankiAddNotes).toHaveBeenCalled());
+    expect(push).not.toHaveBeenCalled();
     openMenu('More');
-    expect(screen.getByRole('menuitem', { name: /Import Anki Deck/ }).textContent).toContain(
+    expect(screen.getByRole('menuitem', { name: /Import Anki Deck/ }).textContent).not.toContain(
       'Premium',
     );
-    expect(anki.ankiStatus).toHaveBeenCalledTimes(1);
+    // Once on open, once for the sync's own status check.
+    expect(anki.ankiStatus).toHaveBeenCalledTimes(2);
   });
 
   it('imports a deck from the menu, bringing a mature new word in as Mastered', async () => {
@@ -603,14 +614,16 @@ describe('VocabularyView Anki link', () => {
     expect((saveFile.mock.calls[0] as unknown as [string])[0]).toBe('readest-vocabulary-anki.txt');
   });
 
-  it('gates the Anki file export behind premium', () => {
+  // P1 (deploy/docs/patch-ledger.md) flips ANKI_REQUIRES_PREMIUM off, so a free
+  // account can export the Anki file without being sent to the plans page.
+  it('exports to Anki for a free account', async () => {
     appService.isAndroidApp = false;
     account.plan = 'free';
     renderWithMenu();
     openMenu('Export');
     fireEvent.click(screen.getByRole('menuitem', { name: /Export to Anki/ }));
-    expect(push).toHaveBeenCalledWith(expect.stringContaining('/user?redirect='));
-    expect(saveFile).not.toHaveBeenCalled();
+    await waitFor(() => expect(saveFile).toHaveBeenCalled());
+    expect(push).not.toHaveBeenCalled();
   });
 
   it('reads the Readest deck together with its subdecks', async () => {

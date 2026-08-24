@@ -63,15 +63,16 @@ describe('ReceiveRequestDialog pairing opt-in', () => {
     expect(screen.queryAllByRole('radio')).toHaveLength(0);
   });
 
-  it('keeps the locked box at full opacity rather than marking it disabled', () => {
+  // P1 (deploy/docs/patch-ledger.md) flips NEARBY_PAIRING_REQUIRES_PREMIUM off,
+  // so the free plan gets the live opt-in with no Premium badge.
+  it('unlocks the pairing box for a free user', () => {
     renderDialog();
-    expect(screen.getByText('Premium')).toBeTruthy();
+    expect(screen.queryByText('Premium')).toBeNull();
     const box = document.querySelector('input[type="checkbox"]') as HTMLInputElement | null;
     expect(box).not.toBeNull();
-    // `disabled` is what triggers daisyUI's opacity:.2 washout.
     expect(box!.disabled).toBe(false);
     expect(box!.checked).toBe(false);
-    expect(box!.className).toContain('border-base-content/45');
+    expect(box!.className).not.toContain('border-base-content/45');
   });
 
   it('passes the book count to the title so i18next can pluralise it', () => {

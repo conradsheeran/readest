@@ -74,6 +74,13 @@ describe('getCatalog', () => {
 });
 
 describe('plan filtering', () => {
+  // See deploy/docs/patch-ledger.md (P1): isSelfHosted() now defaults to true,
+  // which would put every voice in every plan. Stub it off to test the table.
+  beforeEach(() => {
+    vi.stubEnv('SELF_HOSTED', 'false');
+    vi.stubEnv('NEXT_PUBLIC_SELF_HOSTED', 'false');
+  });
+
   it('gives Plus Kokoro, Pro Kokoro and OmniVoice, others nothing', async () => {
     // Qwen3 voices are blocked for every plan, even though the catalog lists them.
     const { voicesForPlan } = await load();

@@ -167,10 +167,15 @@ beforeEach(() => {
 afterEach(() => {
   vi.useRealTimers();
   vi.restoreAllMocks();
+  vi.unstubAllEnvs();
 });
 
 describe('voices and init', () => {
   it('lists every voice to every reader, greying out what the plan lacks', async () => {
+    // See deploy/docs/patch-ledger.md (P1): isSelfHosted() now defaults to true,
+    // which unlocks every tier. Stub it off to test the greying-out behavior.
+    vi.stubEnv('SELF_HOSTED', 'false');
+    vi.stubEnv('NEXT_PUBLIC_SELF_HOSTED', 'false');
     const catalog = [
       ...VOICES,
       { id: 'omnivoice:clara', name: 'Clara', lang: 'en-US', tier: 'pro' },

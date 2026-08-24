@@ -36,9 +36,12 @@ export const getServerRuntimeConfig = (): ReadestRuntimeConfig => ({
     process.env['OBJECT_STORAGE_TYPE'] ?? process.env['NEXT_PUBLIC_OBJECT_STORAGE_TYPE'],
   // A self-hosted deployment unlocks every premium feature: there is no store
   // to buy from, and the operator already runs the infrastructure the paywall
-  // funds.
-  selfHosted:
-    (process.env['SELF_HOSTED'] || process.env['NEXT_PUBLIC_SELF_HOSTED']) === 'true' || undefined,
+  // funds. Preserve an explicit `false` so `SELF_HOSTED=false` reaches the
+  // browser through /runtime-config.js. See deploy/docs/patch-ledger.md (P1).
+  selfHosted: (() => {
+    const raw = process.env['SELF_HOSTED'] || process.env['NEXT_PUBLIC_SELF_HOSTED'];
+    return raw === 'true' ? true : raw === 'false' ? false : undefined;
+  })(),
   storageFixedQuota: (() => {
     const raw =
       process.env['STORAGE_FIXED_QUOTA'] ?? process.env['NEXT_PUBLIC_STORAGE_FIXED_QUOTA'];

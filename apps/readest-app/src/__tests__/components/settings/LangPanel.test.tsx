@@ -166,8 +166,12 @@ const getCustomTranslatorsRow = () =>
 
 // Custom translators are a premium feature: free and signed-out readers see the
 // row with a Premium badge that routes to the upgrade page or sign-in.
+// See deploy/docs/patch-ledger.md (P1): isSelfHosted() now defaults to true, so
+// self-hosting has to be stubbed off to exercise upstream's paywall path.
 describe('LangPanel — Custom Translators premium gate', () => {
   beforeEach(() => {
+    vi.stubEnv('SELF_HOSTED', 'false');
+    vi.stubEnv('NEXT_PUBLIC_SELF_HOSTED', 'false');
     state.token = null;
     state.user = null;
     state.push.mockReset();
@@ -175,6 +179,7 @@ describe('LangPanel — Custom Translators premium gate', () => {
 
   afterEach(() => {
     cleanup();
+    vi.unstubAllEnvs();
   });
 
   it('sends a signed-out reader to sign in', () => {

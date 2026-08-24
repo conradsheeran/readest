@@ -49,26 +49,28 @@ describe('useAbsOfflineDownload', () => {
     expect(queueAbsOfflineDownload).toHaveBeenCalledWith(book, 1);
   });
 
-  it('routes a free user to the upgrade page', () => {
+  // P1 (deploy/docs/patch-ledger.md) flips ABS_OFFLINE_REQUIRES_PREMIUM off, so
+  // the free plan is entitled and starts the download instead of upgrading.
+  it('queues the download for a free user', () => {
     const { result } = renderHook(() => useAbsOfflineDownload());
 
-    expect(result.current.offlinePremiumLabel).toBe('Premium');
+    expect(result.current.offlinePremiumLabel).toBeUndefined();
     result.current.handleBookOfflineDownload(book);
 
-    expect(queueAbsOfflineDownload).not.toHaveBeenCalled();
-    expect(navigateToProfile).toHaveBeenCalled();
+    expect(queueAbsOfflineDownload).toHaveBeenCalledWith(book, 1);
+    expect(navigateToProfile).not.toHaveBeenCalled();
   });
 
-  it('routes a signed-out user to sign in', () => {
+  it('queues the download for a signed-out user', () => {
     state.user = null;
     state.plan = undefined;
     const { result } = renderHook(() => useAbsOfflineDownload());
 
-    expect(result.current.offlinePremiumLabel).toBe('Premium');
+    expect(result.current.offlinePremiumLabel).toBeUndefined();
     result.current.handleBookOfflineDownload(book);
 
-    expect(navigateToLogin).toHaveBeenCalled();
-    expect(queueAbsOfflineDownload).not.toHaveBeenCalled();
+    expect(queueAbsOfflineDownload).toHaveBeenCalledWith(book, 1);
+    expect(navigateToLogin).not.toHaveBeenCalled();
   });
 
   it('queues every book of a bulk download for a premium user', () => {
@@ -82,13 +84,15 @@ describe('useAbsOfflineDownload', () => {
     expect(queueAbsOfflineDownload).toHaveBeenCalledWith(other, 1);
   });
 
-  it('routes a free user to the upgrade page once for a bulk download', () => {
+  it('queues every book of a bulk download for a free user', () => {
+    const other = { ...book, hash: 'h2' };
     const { result } = renderHook(() => useAbsOfflineDownload());
 
-    result.current.handleBooksOfflineDownload([book, { ...book, hash: 'h2' }]);
+    result.current.handleBooksOfflineDownload([book, other]);
 
-    expect(queueAbsOfflineDownload).not.toHaveBeenCalled();
-    expect(navigateToProfile).toHaveBeenCalledTimes(1);
+    expect(queueAbsOfflineDownload).toHaveBeenCalledWith(book, 1);
+    expect(queueAbsOfflineDownload).toHaveBeenCalledWith(other, 1);
+    expect(navigateToProfile).not.toHaveBeenCalled();
   });
 
   it('shows no Premium label while a signed-in plan is still loading', () => {

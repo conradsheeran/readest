@@ -1,4 +1,4 @@
-import { describe, expect, test, vi, beforeEach } from 'vitest';
+import { describe, expect, test, vi, afterEach, beforeEach } from 'vitest';
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { isEmailInPlan } from '@/utils/access';
 import type { UserPlan } from '@/types/quota';
@@ -89,6 +89,11 @@ function makeReq(method: 'GET' | 'POST', body?: unknown): NextApiRequest {
 }
 
 beforeEach(() => {
+  // P1 makes isSelfHosted() default to true, and isEmailInPlan() delegates to
+  // isCustomizationAllowed(). These cases cover the upstream plan gate, so opt
+  // out of self-hosting explicitly.
+  vi.stubEnv('SELF_HOSTED', 'false');
+  vi.stubEnv('NEXT_PUBLIC_SELF_HOSTED', 'false');
   validateUserMock.mockReset();
   getUserProfilePlanMock.mockReset();
   getCustomizationPurchasedMock.mockReset().mockReturnValue(false);
@@ -97,6 +102,10 @@ beforeEach(() => {
     user: { id: 'user-1', email: 'u@example.com' },
     token: 'testtoken',
   });
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
 });
 
 describe('isEmailInPlan helper', () => {

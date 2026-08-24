@@ -87,6 +87,11 @@ const streams = (items: unknown[], hang = false) => {
 const flush = () => new Promise((r) => setTimeout(r, 0));
 
 beforeEach(() => {
+  // P1 (deploy/docs/patch-ledger.md) makes isSelfHosted() default to true.
+  // These route tests exercise upstream's plan gating, so opt back into the
+  // paywall explicitly.
+  vi.stubEnv('SELF_HOSTED', 'false');
+  vi.stubEnv('NEXT_PUBLIC_SELF_HOSTED', 'false');
   for (const fn of [
     m.validateUserAndToken,
     m.getSubscriptionPlan,
@@ -110,7 +115,10 @@ beforeEach(() => {
   vi.spyOn(console, 'error').mockImplementation(() => {});
 });
 
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllEnvs();
+});
 
 describe('gating', () => {
   it('403s when unauthenticated', async () => {

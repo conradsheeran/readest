@@ -50,21 +50,69 @@ flipping their master switches, which is P1.
 
 ### P1 — Open the premium feature gates
 
-- **Target**: `apps/readest-app/src/utils/access.ts`
-- **Change**: `CLOUD_SYNC_REQUIRES_PREMIUM = false` and
-  `TTS_CACHE_REQUIRES_PREMIUM = false`.
-- **Effect**: third-party cloud sync (WebDAV, Google Drive, S3) and the offline
-  TTS audio download stop requiring a paid plan. Upstream documents both
-  constants as master switches — "Every gate goes through `isCloudSyncAllowed`,
-  so this flag is the whole toggle" — so no call site needs touching, and the
+- **Target**: `apps/readest-app/src/utils/access.ts` and
+  `apps/readest-app/src/services/runtimeConfig.ts`
+- **Change**: flip all five master switches to `false`:
+  `CLOUD_SYNC_REQUIRES_PREMIUM`, `TTS_CACHE_REQUIRES_PREMIUM`,
+  `ABS_OFFLINE_REQUIRES_PREMIUM`, `ANKI_REQUIRES_PREMIUM`, and
+  `NEARBY_PAIRING_REQUIRES_PREMIUM`. Also make `isSelfHosted()` default to
+  `true`: it requires all three of `getRuntimeConfig()?.selfHosted !== false`,
+  `process.env['SELF_HOSTED'] !== 'false'`, and
+  `process.env['NEXT_PUBLIC_SELF_HOSTED'] !== 'false'`. For that to work from the
+  browser, `getServerRuntimeConfig()` in `runtimeConfig.ts` preserves an
+  explicit `SELF_HOSTED=false` by emitting `selfHosted: false` instead of
+  `undefined`. Setting `SELF_HOSTED=false` on the client container therefore
+  opts both server routes and the web browser back into upstream's paywall
+  behavior. Make `isTTSInPlan()` and `isVoiceTierInPlan()` honor
+  `isSelfHosted()` too, so Readest Voice never shows a Plus/Pro badge or an
+  upgrade prompt if a voice catalog is ever present or cached.
+- **Effect**: third-party cloud sync (WebDAV, Google Drive, S3), the offline
+  TTS audio download, Audiobookshelf offline downloads, Anki integration, and
+  Nearby BookDrop pairing stop requiring a paid plan. `isSelfHosted()` unlocks
+  custom translators, custom TTS, and LAN OPDS catalogs by default across Web,
+  Android APK, desktop, signed-out sessions, and unit tests — including
+  platforms where the runtime-config flag never reaches the client. Upstream documents the
+  switches as master gates ("Every gate goes through `isCloudSyncAllowed`, so
+  this flag is the whole toggle"), so no call site needs touching, and the
   Premium badges disappear with the gate.
-- **Why not configuration**: compile-time constants. No environment variable
-  reads them.
-- **Conflict risk**: **low.** Two boolean literals in a stable file.
+- **Why not configuration**: compile-time constants, plus an environment default
+  whose absence is indistinguishable from "not self-hosted" for Tauri builds.
+  The runtime `SELF_HOSTED` flag alone cannot reach those platforms.
+- **Tests**: reconciled `tts-cache-plan-gate`, `cloudSync`,
+  `abs-offline-plan-gate`, `nearby-pairing-plan-gate`, `customization-access`,
+  `useAbsOfflineDownload`, and `ReceiveRequestPairing` to assert the unlocked
+  behavior and the `isSelfHosted()` default. `TTSPlayerSheet.test.tsx` (its
+  offline-audio cases) is reconciled in P14, because the signed-out gate there
+  survived the switch. `useTranslator.test.tsx`'s free-user and signed-out
+  fallback cases stub `SELF_HOSTED=false` / `NEXT_PUBLIC_SELF_HOSTED=false` to
+  exercise the non-self-hosted path. `send-address-plan-gate.test.ts` also
+  stubs both variables, because `isEmailInPlan()` delegates to
+  `isCustomizationAllowed()`. `access-tts.test.ts` covers the `isTTSInPlan()` /
+  `isVoiceTierInPlan()` self-hosted default and the underlying `TTS_PLANS` table
+  with self-hosting disabled. The three Readest Voice route suites —
+  `tts-readest-route.test.ts`, `tts-readest-stream-route.test.ts`, and
+  `tts-readest-jobs-route.test.ts` — stub `SELF_HOSTED=false` /
+  `NEXT_PUBLIC_SELF_HOSTED=false` for upstream's plan/tier gating cases, and
+  `tts-readest-route.test.ts` asserts the unlocked self-hosted default on
+  `GET /api/tts/readest`. `customization-access.test.ts` covers
+  `getServerRuntimeConfig()` — `selfHosted: false` for an explicit
+  `SELF_HOSTED=false` and `undefined` when unset — and that
+  `window.__READEST_RUNTIME_CONFIG.selfHosted === false` disables
+  `isSelfHosted()` in the browser. `catalog-manager.test.tsx` needs no change:
+  it mocks `isSelfHosted()` directly. Reconciled after the v0.12.20 sweep:
+  `LangPanel.test.tsx` and `TTSPanel.test.tsx` stub `SELF_HOSTED=false` /
+  `NEXT_PUBLIC_SELF_HOSTED=false` to exercise upstream's custom-translator and
+  custom-TTS paywall; `readest-voice-catalog.test.ts` (plan filtering) and
+  `tts-readest-provider.test.ts` (plan-greyed voices) stub both for the same
+  reason. `useLibraryRefresh.test.tsx`, `TransferQueuePanel.test.tsx`,
+  `runLibrarySync.test.ts`, and `VocabularyView.test.tsx` now assert the
+  unlocked cloud-sync and Anki behavior instead of the paused/upgrade path.
+- **Conflict risk**: **low.** Boolean literals and one small function in a
+  stable file.
 - **When it breaks**: the rebase fails on a missing line. Re-locate the switch. If
   upstream has abandoned the master-switch pattern, re-derive the gate list with
   the grep in `upgrade-runbook.md`.
-- **Status**: not applied
+- **Status**: applied
 
 ### P2 — Stop fetching subscription plans
 

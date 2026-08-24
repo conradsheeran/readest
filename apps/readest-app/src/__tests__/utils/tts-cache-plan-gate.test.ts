@@ -1,8 +1,20 @@
-import { describe, expect, test } from 'vitest';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
 import { TTS_CACHE_REQUIRES_PREMIUM, isTTSCacheAllowed, isTTSCacheInPlan } from '@/utils/access';
 
+// P1 (deploy/docs/patch-ledger.md) makes `isSelfHosted()` default to true, which
+// would unlock the plan table too. Pin upstream's paywall expectations by
+// explicitly disabling self-hosting in this block.
 describe('isTTSCacheInPlan', () => {
+  beforeEach(() => {
+    vi.stubEnv('SELF_HOSTED', 'false');
+    vi.stubEnv('NEXT_PUBLIC_SELF_HOSTED', 'false');
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   test('any paid plan can use the offline TTS audio cache', () => {
     expect(isTTSCacheInPlan('plus', false)).toBe(true);
     expect(isTTSCacheInPlan('pro', false)).toBe(true);
@@ -15,27 +27,23 @@ describe('isTTSCacheInPlan', () => {
   });
 });
 
-describe('isTTSCacheAllowed (premium paywall)', () => {
-  test('downloading TTS audio for offline playback requires a paid plan', () => {
-    expect(TTS_CACHE_REQUIRES_PREMIUM).toBe(true);
-    expect(isTTSCacheAllowed('free', false)).toBe(false);
+// P1 (deploy/docs/patch-ledger.md) flips the master switch off, so every plan
+// — including `free` and a storage-only `purchase` — may download TTS audio.
+describe('isTTSCacheAllowed (unlocked by P1)', () => {
+  test('every plan can download TTS audio for offline playback', () => {
+    expect(TTS_CACHE_REQUIRES_PREMIUM).toBe(false);
+    expect(isTTSCacheAllowed('free', false)).toBe(true);
     expect(isTTSCacheAllowed('plus', false)).toBe(true);
     expect(isTTSCacheAllowed('pro', false)).toBe(true);
-    expect(isTTSCacheAllowed('purchase', false)).toBe(false);
+    expect(isTTSCacheAllowed('purchase', false)).toBe(true);
   });
 });
 
-// Premium is now the plan OR an outright Full Customization purchase.
+// The customization purchase cannot change an already-unlocked gate.
 describe('isTTSCacheAllowed — customization unlock', () => {
-  test('entitles a free user who bought Full Customization', () => {
+  test('the purchase flag no longer changes the result', () => {
     expect(isTTSCacheAllowed('free', true)).toBe(true);
-  });
-
-  test('entitles a grandfathered storage buyer, who carries the flag', () => {
     expect(isTTSCacheAllowed('purchase', true)).toBe(true);
-  });
-
-  test('does not entitle a storage-only buyer after the grace period', () => {
-    expect(isTTSCacheAllowed('purchase', false)).toBe(false);
+    expect(isTTSCacheAllowed('purchase', false)).toBe(true);
   });
 });

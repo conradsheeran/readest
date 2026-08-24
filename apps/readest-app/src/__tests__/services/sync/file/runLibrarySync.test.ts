@@ -321,9 +321,11 @@ describe('getReadyFileSyncBackends', () => {
     expect(getReadyFileSyncBackends(settings)).toEqual(['webdav', 'gdrive']);
   });
 
-  test('excludes everything when the plan gate pauses third-party sync', () => {
+  // P1 (deploy/docs/patch-ledger.md) flips CLOUD_SYNC_REQUIRES_PREMIUM off, so
+  // the plan gate no longer pauses third-party sync for a free account.
+  test('keeps third-party sync ready for a free plan', () => {
     setCachedUserPlan('free');
-    expect(getReadyFileSyncBackends(settings)).toEqual([]);
+    expect(getReadyFileSyncBackends(settings)).toEqual(['webdav', 'gdrive']);
   });
 
   test('rules icloud out off Apple platforms (canBackendRun false)', () => {

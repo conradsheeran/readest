@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { act, renderHook, waitFor } from '@testing-library/react';
 
 const { generateTextMock, getFromCacheMock, storeInCacheMock, isTauriMock, auth } = vi.hoisted(
@@ -119,17 +119,30 @@ describe('custom translators in the registry and useTranslator', () => {
     expect(isTranslatorAvailable(builtIn, true, false)).toBe(true);
   });
 
-  it('falls back to a built-in translator for a free user who picked a custom one', async () => {
-    auth.token = sessionToken({ plan: 'free' });
-    const { result } = renderHook(() => useTranslator({ provider: 'custom:llm' }));
-    await waitFor(() => expect(result.current.translator).toBeDefined());
-    expect(result.current.translator!.name.startsWith('custom:')).toBe(false);
-  });
+  describe('with self-hosting disabled', () => {
+    // P1 makes isSelfHosted() default to true. These two cases cover the
+    // upstream paywall path, so opt back into it explicitly.
+    beforeEach(() => {
+      vi.stubEnv('SELF_HOSTED', 'false');
+      vi.stubEnv('NEXT_PUBLIC_SELF_HOSTED', 'false');
+    });
 
-  it('falls back to a built-in translator when signed out', async () => {
-    auth.token = null;
-    const { result } = renderHook(() => useTranslator({ provider: 'custom:llm' }));
-    await waitFor(() => expect(result.current.translator).toBeDefined());
-    expect(result.current.translator!.name.startsWith('custom:')).toBe(false);
+    afterEach(() => {
+      vi.unstubAllEnvs();
+    });
+
+    it('falls back to a built-in translator for a free user who picked a custom one', async () => {
+      auth.token = sessionToken({ plan: 'free' });
+      const { result } = renderHook(() => useTranslator({ provider: 'custom:llm' }));
+      await waitFor(() => expect(result.current.translator).toBeDefined());
+      expect(result.current.translator!.name.startsWith('custom:')).toBe(false);
+    });
+
+    it('falls back to a built-in translator when signed out', async () => {
+      auth.token = null;
+      const { result } = renderHook(() => useTranslator({ provider: 'custom:llm' }));
+      await waitFor(() => expect(result.current.translator).toBeDefined());
+      expect(result.current.translator!.name.startsWith('custom:')).toBe(false);
+    });
   });
 });

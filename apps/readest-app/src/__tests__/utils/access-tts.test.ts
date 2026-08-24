@@ -1,7 +1,23 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getTTSQuota, isTTSInPlan, isVoiceTierInPlan, TTS_PLANS } from '@/utils/access';
 
-describe('TTS plan gating', () => {
+// P1 (deploy/docs/patch-ledger.md) makes isSelfHosted() default to true, so
+// Readest Voice is unlocked even if a voice catalog is present or cached.
+describe('TTS plan gating (self-hosted default)', () => {
+  it('unlocks every plan and voice tier by default', () => {
+    expect(isTTSInPlan('free')).toBe(true);
+    expect(isVoiceTierInPlan('pro', 'free')).toBe(true);
+  });
+});
+
+describe('TTS plan gating (self-hosting explicitly disabled)', () => {
+  beforeEach(() => {
+    vi.stubEnv('SELF_HOSTED', 'false');
+    vi.stubEnv('NEXT_PUBLIC_SELF_HOSTED', 'false');
+  });
+
+  afterEach(() => vi.unstubAllEnvs());
+
   it('includes exactly plus and pro', () => {
     expect(TTS_PLANS).toEqual(['plus', 'pro']);
     expect(isTTSInPlan('plus')).toBe(true);
@@ -9,9 +25,7 @@ describe('TTS plan gating', () => {
     expect(isTTSInPlan('free')).toBe(false);
     expect(isTTSInPlan('purchase')).toBe(false);
   });
-});
 
-describe('isVoiceTierInPlan', () => {
   it('unlocks Plus voices for Plus and Pro, Pro voices for Pro only', () => {
     expect(
       ['free', 'purchase', 'plus', 'pro'].map((p) => isVoiceTierInPlan('plus', p as never)),

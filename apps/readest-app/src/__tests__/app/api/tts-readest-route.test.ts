@@ -39,6 +39,11 @@ const req = (method: 'GET' | 'POST', body?: unknown, query = '') =>
   });
 
 beforeEach(() => {
+  // P1 (deploy/docs/patch-ledger.md) makes isSelfHosted() default to true.
+  // These route tests exercise upstream's plan gating, so opt back into the
+  // paywall explicitly; one test below covers the self-hosted default.
+  vi.stubEnv('SELF_HOSTED', 'false');
+  vi.stubEnv('NEXT_PUBLIC_SELF_HOSTED', 'false');
   for (const fn of [
     m.validateUserAndToken,
     m.getSubscriptionPlan,
@@ -55,7 +60,10 @@ beforeEach(() => {
   m.service.warmup.mockResolvedValue(undefined);
 });
 
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllEnvs();
+});
 
 describe('GET /api/tts/readest', () => {
   it('403s when unauthenticated', async () => {
@@ -79,6 +87,21 @@ describe('GET /api/tts/readest', () => {
   it.each(['free', 'purchase'])('403s PLAN_REQUIRED for %s', async (plan) => {
     m.getSubscriptionPlan.mockReturnValue(plan);
     expect(await (await GET(req('GET'))).json()).toEqual({ error: 'PLAN_REQUIRED' });
+  });
+
+  // P1 (deploy/docs/patch-ledger.md) defaults the deployment to self-hosted,
+  // so a free plan sees every offered voice unless the operator opts out.
+  it('unlocks every voice for a free plan by default (self-hosted)', async () => {
+    vi.unstubAllEnvs();
+    m.getSubscriptionPlan.mockReturnValue('free');
+    const res = await GET(req('GET'));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      voices: [
+        { id: 'kokoro:af_heart', name: 'Heart', lang: 'en-US', tier: 'plus', gender: 'female' },
+        { id: 'omnivoice:clara', name: 'Clara', lang: 'en-US', tier: 'pro' },
+      ],
+    });
   });
 
   it('lists Kokoro for Plus, Kokoro and OmniVoice for Pro', async () => {

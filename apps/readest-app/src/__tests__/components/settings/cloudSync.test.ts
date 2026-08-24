@@ -1,4 +1,4 @@
-import { describe, expect, test, vi, beforeEach } from 'vitest';
+import { afterEach, describe, expect, test, vi, beforeEach } from 'vitest';
 
 vi.mock('@/utils/settingsSync', () => ({
   broadcastGlobalSettings: vi.fn(),
@@ -17,7 +17,19 @@ import type { EnvConfigType } from '@/services/environment';
 
 const mockBroadcastGlobalSettings = vi.mocked(broadcastGlobalSettings);
 
+// P1 (deploy/docs/patch-ledger.md) makes `isSelfHosted()` default to true, which
+// would unlock the plan table too. Pin upstream's paywall expectations by
+// explicitly disabling self-hosting in this block.
 describe('isCloudSyncInPlan', () => {
+  beforeEach(() => {
+    vi.stubEnv('SELF_HOSTED', 'false');
+    vi.stubEnv('NEXT_PUBLIC_SELF_HOSTED', 'false');
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   test('any paid plan can use cloud sync', () => {
     expect(isCloudSyncInPlan('plus', false)).toBe(true);
     expect(isCloudSyncInPlan('pro', false)).toBe(true);
@@ -30,13 +42,15 @@ describe('isCloudSyncInPlan', () => {
   });
 });
 
-describe('isCloudSyncAllowed (premium paywall)', () => {
-  test('third-party cloud sync requires a paid plan', () => {
-    expect(CLOUD_SYNC_REQUIRES_PREMIUM).toBe(true);
-    expect(isCloudSyncAllowed('free', false)).toBe(false);
+// P1 (deploy/docs/patch-ledger.md) flips the master switch off, so every plan
+// — including `free` and a storage-only `purchase` — may use cloud sync.
+describe('isCloudSyncAllowed (unlocked by P1)', () => {
+  test('every plan can use third-party cloud sync', () => {
+    expect(CLOUD_SYNC_REQUIRES_PREMIUM).toBe(false);
+    expect(isCloudSyncAllowed('free', false)).toBe(true);
     expect(isCloudSyncAllowed('plus', false)).toBe(true);
     expect(isCloudSyncAllowed('pro', false)).toBe(true);
-    expect(isCloudSyncAllowed('purchase', false)).toBe(false);
+    expect(isCloudSyncAllowed('purchase', false)).toBe(true);
   });
 });
 
@@ -279,17 +293,11 @@ describe('persistReadestCloudChoice', () => {
   });
 });
 
-// Premium is now the plan OR an outright Full Customization purchase.
+// The customization purchase cannot change an already-unlocked gate.
 describe('isCloudSyncAllowed — customization unlock', () => {
-  test('entitles a free user who bought Full Customization', () => {
+  test('the purchase flag no longer changes the result', () => {
     expect(isCloudSyncAllowed('free', true)).toBe(true);
-  });
-
-  test('entitles a grandfathered storage buyer, who carries the flag', () => {
     expect(isCloudSyncAllowed('purchase', true)).toBe(true);
-  });
-
-  test('does not entitle a storage-only buyer after the grace period', () => {
-    expect(isCloudSyncAllowed('purchase', false)).toBe(false);
+    expect(isCloudSyncAllowed('purchase', false)).toBe(true);
   });
 });

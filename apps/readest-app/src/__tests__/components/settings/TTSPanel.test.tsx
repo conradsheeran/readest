@@ -176,14 +176,21 @@ describe('TTSPanel audio cache', () => {
   });
 });
 
+// See deploy/docs/patch-ledger.md (P1): isSelfHosted() now defaults to true, so
+// self-hosting has to be stubbed off to exercise upstream's paywall path.
 describe('TTSPanel custom TTS services premium gate', () => {
   beforeEach(() => {
+    vi.stubEnv('SELF_HOSTED', 'false');
+    vi.stubEnv('NEXT_PUBLIC_SELF_HOSTED', 'false');
     state.token = null;
     state.user = null;
     state.push.mockReset();
   });
 
-  afterEach(cleanup);
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllEnvs();
+  });
 
   it('sends a signed-out reader to sign in', () => {
     render(<TTSPanel bookKey='book-1' onRegisterReset={vi.fn()} />);

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { jwtDecode } from 'jwt-decode';
 import {
   getCustomizationPurchased,
@@ -7,6 +7,7 @@ import {
   isCustomTranslatorAllowed,
   isSelfHosted,
 } from '@/utils/access';
+import { getServerRuntimeConfig } from '@/services/runtimeConfig';
 
 vi.mock('jwt-decode', () => ({ jwtDecode: vi.fn() }));
 
@@ -25,7 +26,28 @@ describe('getCustomizationPurchased', () => {
   });
 });
 
-describe('isCustomizationAllowed', () => {
+// P1 (deploy/docs/patch-ledger.md) makes `isSelfHosted()` default to true, so
+// the paywall is off unless the deployment explicitly opts back in.
+describe('isCustomizationAllowed (self-hosted default)', () => {
+  it('is unlocked for every plan and purchase state', () => {
+    expect(isCustomizationAllowed('free', false)).toBe(true);
+    expect(isCustomizationAllowed('purchase', false)).toBe(true);
+    expect(isCustomizationAllowed('plus', false)).toBe(true);
+    expect(isCustomizationAllowed('pro', false)).toBe(true);
+    expect(isCustomizationAllowed('free', true)).toBe(true);
+  });
+});
+
+describe('isCustomizationAllowed (self-hosting explicitly disabled)', () => {
+  beforeEach(() => {
+    vi.stubEnv('SELF_HOSTED', 'false');
+    vi.stubEnv('NEXT_PUBLIC_SELF_HOSTED', 'false');
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   it('allows an explicit purchase on any plan', () => {
     expect(isCustomizationAllowed('free', true)).toBe(true);
   });
@@ -54,26 +76,68 @@ describe('self-hosted deployments', () => {
     vi.unstubAllEnvs();
   });
 
-  it('is off by default', () => {
+  it('is on by default', () => {
+    expect(isSelfHosted()).toBe(true);
+  });
+
+  it('is off only when explicitly set to false', () => {
+    vi.stubEnv('SELF_HOSTED', 'false');
     expect(isSelfHosted()).toBe(false);
   });
 
+  it('stays on when NEXT_PUBLIC_SELF_HOSTED is explicitly true', () => {
+    vi.stubEnv('NEXT_PUBLIC_SELF_HOSTED', 'true');
+    expect(isSelfHosted()).toBe(true);
+  });
+
   it('unlocks premium for a signed-in free user with no purchase', () => {
-    vi.stubEnv('SELF_HOSTED', 'true');
     expect(isCustomizationAllowed('free', false)).toBe(true);
   });
 
   it('unlocks premium with no login at all, where the plan reads free', () => {
-    vi.stubEnv('NEXT_PUBLIC_SELF_HOSTED', 'true');
     expect(isCustomizationAllowed('free', false)).toBe(true);
   });
 
-  // `??` stops at an empty string, so a blank SELF_HOSTED would mask the
-  // public variable and silently re-lock a self-hosted deployment.
-  it('falls through an explicitly empty SELF_HOSTED', () => {
+  // Defaulting to on means an explicitly blank variable must not re-lock it.
+  it('stays unlocked when SELF_HOSTED is an explicitly empty string', () => {
     vi.stubEnv('SELF_HOSTED', '');
-    vi.stubEnv('NEXT_PUBLIC_SELF_HOSTED', 'true');
     expect(isSelfHosted()).toBe(true);
+  });
+});
+
+// P1 (deploy/docs/patch-ledger.md) ships the self-hosted flag to the browser
+// through /runtime-config.js. An explicit `SELF_HOSTED=false` must reach the
+// browser as `selfHosted: false`, or the container cannot opt back into the
+// upstream paywall.
+describe('runtime-config self-hosting (P1)', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    delete window.__READEST_RUNTIME_CONFIG;
+  });
+
+  it('emits selfHosted: false when SELF_HOSTED is explicitly false', () => {
+    vi.stubEnv('SELF_HOSTED', 'false');
+    vi.stubEnv('NEXT_PUBLIC_SELF_HOSTED', undefined);
+    expect(getServerRuntimeConfig().selfHosted).toBe(false);
+  });
+
+  it('emits selfHosted: true when SELF_HOSTED is explicitly true', () => {
+    vi.stubEnv('SELF_HOSTED', 'true');
+    vi.stubEnv('NEXT_PUBLIC_SELF_HOSTED', undefined);
+    expect(getServerRuntimeConfig().selfHosted).toBe(true);
+  });
+
+  it('emits selfHosted: undefined when neither variable is set', () => {
+    vi.stubEnv('SELF_HOSTED', undefined);
+    vi.stubEnv('NEXT_PUBLIC_SELF_HOSTED', undefined);
+    expect(getServerRuntimeConfig().selfHosted).toBeUndefined();
+  });
+
+  it('honors the runtime config opt-out in the browser even without env vars', () => {
+    vi.stubEnv('SELF_HOSTED', undefined);
+    vi.stubEnv('NEXT_PUBLIC_SELF_HOSTED', undefined);
+    window.__READEST_RUNTIME_CONFIG = { selfHosted: false };
+    expect(isSelfHosted()).toBe(false);
   });
 });
 
@@ -85,37 +149,47 @@ describe('isCustomTranslatorAllowed', () => {
     vi.unstubAllEnvs();
   });
 
-  it('allows a subscriber', () => {
+  it('allows any signed-in reader and a signed-out reader by default', () => {
+    expect(isCustomTranslatorAllowed(mockToken({ plan: 'free' }))).toBe(true);
     expect(isCustomTranslatorAllowed(mockToken({ plan: 'plus' }))).toBe(true);
-  });
-
-  it('allows a free user who bought Full Customization', () => {
-    expect(isCustomTranslatorAllowed(mockToken({ customization_purchased: true }))).toBe(true);
-  });
-
-  it('denies a free user and a storage-only buyer', () => {
-    expect(isCustomTranslatorAllowed(mockToken({ plan: 'free' }))).toBe(false);
-    expect(
-      isCustomTranslatorAllowed(mockToken({ plan: 'free', storage_purchased_bytes: 1e9 })),
-    ).toBe(false);
-  });
-
-  it('denies a signed-out reader', () => {
-    expect(isCustomTranslatorAllowed(null)).toBe(false);
-  });
-
-  it('allows a signed-out reader on a self-hosted deployment', () => {
-    vi.stubEnv('NEXT_PUBLIC_SELF_HOSTED', 'true');
     expect(isCustomTranslatorAllowed(null)).toBe(true);
+  });
+
+  describe('with self-hosting explicitly disabled', () => {
+    beforeEach(() => {
+      vi.stubEnv('SELF_HOSTED', 'false');
+      vi.stubEnv('NEXT_PUBLIC_SELF_HOSTED', 'false');
+    });
+
+    it('allows a subscriber', () => {
+      expect(isCustomTranslatorAllowed(mockToken({ plan: 'plus' }))).toBe(true);
+    });
+
+    it('allows a free user who bought Full Customization', () => {
+      expect(isCustomTranslatorAllowed(mockToken({ customization_purchased: true }))).toBe(true);
+    });
+
+    it('denies a free user and a storage-only buyer', () => {
+      expect(isCustomTranslatorAllowed(mockToken({ plan: 'free' }))).toBe(false);
+      expect(
+        isCustomTranslatorAllowed(mockToken({ plan: 'free', storage_purchased_bytes: 1e9 })),
+      ).toBe(false);
+    });
+
+    it('denies a signed-out reader', () => {
+      expect(isCustomTranslatorAllowed(null)).toBe(false);
+    });
   });
 });
 
+// P1 (deploy/docs/patch-ledger.md) flips ANKI_REQUIRES_PREMIUM off, so the
+// master gate short-circuits before any plan lookup.
 describe('isAnkiAllowed', () => {
-  it('needs a paid plan or the customization purchase', () => {
-    expect(isAnkiAllowed('free', false)).toBe(false);
+  it('is unlocked for every plan and purchase state', () => {
+    expect(isAnkiAllowed('free', false)).toBe(true);
     expect(isAnkiAllowed('plus', false)).toBe(true);
     expect(isAnkiAllowed('pro', false)).toBe(true);
     expect(isAnkiAllowed('free', true)).toBe(true);
-    expect(isAnkiAllowed('purchase', false)).toBe(false);
+    expect(isAnkiAllowed('purchase', false)).toBe(true);
   });
 });

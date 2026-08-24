@@ -86,15 +86,17 @@ for (const [stage, fullRefresh] of [false, true].entries()) {
       expect(h.pull).toHaveBeenCalledWith(fullRefresh, true);
     });
 
-    it('prompts for sign-in when the only file backend is paused by the plan gate', async () => {
+    // P1 (deploy/docs/patch-ledger.md) flips CLOUD_SYNC_REQUIRES_PREMIUM off, so
+    // a free account's enabled WebDAV backend is no longer paused by the plan.
+    it('refreshes a free account whose only file backend is enabled', async () => {
       setCachedUserPlan('free');
       const settings = useSettingsStore.getState().settings;
       useSettingsStore.setState({
         settings: { ...settings, webdav: { ...settings.webdav, enabled: true } },
       });
       await refresh();
-      expect(h.login).toHaveBeenCalledWith(h.router);
-      expect(h.pull).not.toHaveBeenCalled();
+      expect(h.login).not.toHaveBeenCalled();
+      expect(h.pull).toHaveBeenCalledWith(fullRefresh, true);
     });
 
     it('refreshes OPDS even when a configured file backend is paused', async () => {
