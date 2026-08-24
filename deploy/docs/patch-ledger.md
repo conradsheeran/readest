@@ -87,7 +87,7 @@ flipping their master switches, which is P1.
   field. Add it to the stub.
 - **Depended on by**: the "Restore Purchase" button staying hidden. Do not weaken
   `iapAvailable: false` without re-checking that.
-- **Status**: not applied
+- **Status**: applied
 
 ### P3 — Remove the plan comparison panel
 
