@@ -64,7 +64,7 @@ flipping their master switches, which is P1.
 - **When it breaks**: the rebase fails on a missing line. Re-locate the switch. If
   upstream has abandoned the master-switch pattern, re-derive the gate list with
   the grep in `upgrade-runbook.md`.
-- **Status**: not applied
+- **Status**: applied
 
 ### P2 — Stop fetching subscription plans
 
