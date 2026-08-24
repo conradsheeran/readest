@@ -92,9 +92,11 @@ const handler = async (req: NextApiRequest, res: NextApiResponse) => {
   const hasKVCache = !!env['TRANSLATIONS_KV'];
 
   const { user, token } = await validateUserAndToken(req.headers['authorization']);
-  const { DEEPL_PRO_API, DEEPL_FREE_API } = process.env;
-  const deepFreeApiUrl = DEEPL_FREE_API || DEFAULT_DEEPL_FREE_API;
-  const deeplProApiUrl = DEEPL_PRO_API || DEFAULT_DEEPL_PRO_API;
+  // DEEPLX_API_URL wins over both official endpoints, so a self-hosted DeepLX
+  // proxy serves every plan. See deploy/docs/patch-ledger.md (P6).
+  const { DEEPL_PRO_API, DEEPL_FREE_API, DEEPLX_API_URL } = process.env;
+  const deepFreeApiUrl = DEEPLX_API_URL || DEEPL_FREE_API || DEFAULT_DEEPL_FREE_API;
+  const deeplProApiUrl = DEEPLX_API_URL || DEEPL_PRO_API || DEFAULT_DEEPL_PRO_API;
 
   let deeplApiUrl = deepFreeApiUrl;
   let userPlan = 'free';
@@ -203,13 +205,23 @@ async function callDeepLAPI(
     delete requestBody.source_lang;
   }
 
+  // DeepLX authenticates with a bearer token and rejects DeepL's own
+  // `x-fingerprint` header, so both differ by endpoint (P6).
+  const isDeepLXApi = !!process.env['DEEPLX_API_URL'] && apiUrl === process.env['DEEPLX_API_URL'];
+  const headers: Record<string, string> = {
+    Authorization: isDeepLXApi
+      ? `Bearer ${process.env['DEEPLX_API_TOKEN'] || authKey}`
+      : `DeepL-Auth-Key ${authKey}`,
+    'Content-Type': 'application/json',
+  };
+
+  if (!isDeepLXApi) {
+    headers['x-fingerprint'] = process.env['DEEPL_X_FINGERPRINT'] || '';
+  }
+
   const response = await fetch(apiUrl, {
     method: 'POST',
-    headers: {
-      Authorization: `DeepL-Auth-Key ${authKey}`,
-      'x-fingerprint': process.env['DEEPL_X_FINGERPRINT'] || '',
-      'Content-Type': 'application/json',
-    },
+    headers,
     body: JSON.stringify(requestBody),
   });
 

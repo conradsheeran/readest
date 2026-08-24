@@ -175,7 +175,7 @@ flipping their master switches, which is P1.
 - **Why not configuration**: both the endpoint choice and the auth scheme are
   hardcoded.
 - **Conflict risk**: **medium.** Two fragments of a route upstream still changes.
-- **Status**: not applied — a working implementation exists on `legacy-deploy`
+- **Status**: applied
 
 ### P7 — Delete upstream's workflows
 
