@@ -3,29 +3,18 @@ import semver from 'semver';
 import Image from 'next/image';
 import { useEnv } from '@/context/EnvContext';
 import { useEffect, useState } from 'react';
-import { type as osType, arch as osArch } from '@tauri-apps/plugin-os';
-import { check, Update } from '@tauri-apps/plugin-updater';
-import { relaunch, exit } from '@tauri-apps/plugin-process';
+import { Update } from '@tauri-apps/plugin-updater';
+import { relaunch } from '@tauri-apps/plugin-process';
 import { fetch as tauriFetch } from '@tauri-apps/plugin-http';
-import { Command } from '@tauri-apps/plugin-shell';
-import { invoke } from '@tauri-apps/api/core';
-import { desktopDir } from '@tauri-apps/api/path';
 import { isTauriAppPlatform } from '@/services/environment';
 import { useTranslator } from '@/hooks/useTranslator';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useSearchParams } from 'next/navigation';
 import { getAppVersion } from '@/utils/version';
-import { tauriDownload } from '@/utils/transfer';
-import { installPackage, verifyUpdateSignature, installNightlyUpdate } from '@/utils/bridge';
-import { join } from '@tauri-apps/api/path';
 import { getLocale } from '@/utils/misc';
 import { setLastShownReleaseNotesVersion } from '@/helpers/updater';
 import type { ResolvedNightlyUpdate } from '@/helpers/updater';
-import {
-  READEST_UPDATER_FILE,
-  READEST_CHANGELOG_FILE,
-  READEST_UPDATER_PUBKEY,
-} from '@/services/constants';
+import { READEST_CHANGELOG_FILE } from '@/services/constants';
 import Dialog from '@/components/Dialog';
 import Link from './Link';
 
@@ -73,22 +62,16 @@ interface GenericUpdate {
   downloadAndInstall?(onEvent?: (progress: DownloadEvent) => void): Promise<void>;
 }
 
-const TAURI_UPDATER_KEYS = new Set([
-  'darwin-aarch64',
-  'darwin-x86_64',
-  'windows-x86_64',
-  'windows-aarch64',
-]);
-
 export const UpdaterContent = ({
   latestVersion,
   lastVersion,
   checkUpdate = true,
-  nightlyUpdate,
 }: {
   latestVersion?: string;
   lastVersion?: string;
   checkUpdate?: boolean;
+  // Still accepted, no longer read: the nightly channel resolved an update from
+  // upstream's manifest, and that path is gone. See patch-ledger.md (P9).
   nightlyUpdate?: ResolvedNightlyUpdate;
 }) => {
   const _ = useTranslation();
@@ -120,277 +103,6 @@ export const UpdaterContent = ({
   useEffect(() => {
     setTargetLang(getLocale());
   }, []);
-
-  useEffect(() => {
-    const checkDesktopUpdate = async () => {
-      const update = await check();
-      if (update) {
-        setUpdate(update);
-      }
-    };
-    const checkAndroidUpdate = async () => {
-      if (!appService) return;
-      const fetch = isTauriAppPlatform() ? tauriFetch : window.fetch;
-      const response = await fetch(READEST_UPDATER_FILE);
-      const data = await response.json();
-      if (semver.gt(data.version, currentVersion)) {
-        const OS_ARCH = osArch();
-        const platformKey = OS_ARCH === 'aarch64' ? 'android-arm64' : 'android-universal';
-        const arch = OS_ARCH === 'aarch64' ? 'arm64' : 'universal';
-        const downloadUrl = data.platforms[platformKey]?.url as string;
-        const apkFilePath = await appService.resolveFilePath(
-          `Readest_${data.version}_${arch}.apk`,
-          'Cache',
-        );
-        setUpdate({
-          currentVersion,
-          version: data.version,
-          date: data.pub_date,
-          body: data.notes,
-          downloadAndInstall: async (onEvent) => {
-            await new Promise<void>(async (resolve, reject) => {
-              let downloaded = 0;
-              let total = 0;
-              await tauriDownload(downloadUrl, apkFilePath, (progress) => {
-                if (!onEvent) return;
-                if (!total && progress.total) {
-                  total = progress.total;
-                  onEvent({
-                    event: 'Started',
-                    data: { contentLength: total },
-                  });
-                } else if (downloaded > 0 && progress.progress === progress.total) {
-                  console.log('APK downloaded to', apkFilePath);
-                  onEvent?.({ event: 'Finished' });
-                  setTimeout(() => {
-                    resolve();
-                  }, 1000);
-                }
-
-                onEvent({
-                  event: 'Progress',
-                  data: { chunkLength: progress.progress - downloaded },
-                });
-                downloaded = progress.progress;
-              }).catch((error) => {
-                console.error('Download failed:', error);
-                reject(error);
-              });
-            });
-
-            const res = await installPackage({
-              path: apkFilePath,
-            });
-            if (res.success) {
-              console.log('APK installed successfully');
-            } else {
-              console.error('Failed to install APK:', res.error);
-            }
-          },
-        } as GenericUpdate);
-      }
-    };
-    const downloadWithProgress = async (
-      downloadUrl: string,
-      filePath: string,
-      onEvent?: (progress: DownloadEvent) => void,
-    ): Promise<void> => {
-      let downloaded = 0;
-      let total = 0;
-      let finished = false;
-      // Resolve when tauriDownload itself completes — NOT only when a progress
-      // tick reports progress === total. Servers that omit Content-Length leave
-      // total at 0, so that tick never fires and the await would hang forever
-      // after the file is fully written (nightly portable/AppImage/Android).
-      await tauriDownload(downloadUrl, filePath, (progress) => {
-        if (!onEvent) return;
-        if (!total && progress.total) {
-          total = progress.total;
-          onEvent({ event: 'Started', data: { contentLength: total } });
-        }
-        onEvent({ event: 'Progress', data: { chunkLength: progress.progress - downloaded } });
-        downloaded = progress.progress;
-        if (progress.total && progress.progress === progress.total && !finished) {
-          finished = true;
-          onEvent({ event: 'Finished' });
-        }
-      });
-      console.log('File downloaded to', filePath);
-      if (onEvent && !finished) onEvent({ event: 'Finished' });
-    };
-    const checkWindowsPortableUpdate = async () => {
-      if (!appService) return;
-      const fetch = isTauriAppPlatform() ? tauriFetch : window.fetch;
-      const response = await fetch(READEST_UPDATER_FILE);
-      const data = await response.json();
-      if (semver.gt(data.version, currentVersion)) {
-        const OS_ARCH = osArch();
-        const platformKey =
-          OS_ARCH === 'x86_64' ? 'windows-x86_64-portable' : 'windows-aarch64-portable';
-        const arch = OS_ARCH === 'x86_64' ? 'x64' : 'arm64';
-        const downloadUrl = data.platforms[platformKey]?.url as string;
-        const execDir = await invoke<string>('get_executable_dir');
-        const exeFileName = `Readest_${data.version}_${arch}-portable.exe`;
-        const exeFilePath = await join(execDir, exeFileName);
-        setUpdate({
-          currentVersion,
-          version: data.version,
-          date: data.pub_date,
-          body: data.notes,
-          downloadAndInstall: async (onEvent) => {
-            await downloadWithProgress(downloadUrl, exeFilePath, onEvent);
-            try {
-              console.log('Launching new executable:', exeFilePath);
-              const command = Command.create('start-readest', ['/C', 'start', '', exeFilePath]);
-              await command.spawn();
-              console.log('New executable launched, exiting current app...');
-              setTimeout(async () => {
-                await exit(0);
-              }, 500);
-            } catch (error) {
-              console.error('Failed to launch new executable:', error);
-            }
-          },
-        } as GenericUpdate);
-      }
-    };
-    const checkAppImageUpdate = async () => {
-      if (!appService) return;
-      const fetch = isTauriAppPlatform() ? tauriFetch : window.fetch;
-      const response = await fetch(READEST_UPDATER_FILE);
-      const data = await response.json();
-      if (semver.gt(data.version, currentVersion)) {
-        const OS_ARCH = osArch();
-        const platformKey =
-          OS_ARCH === 'x86_64' ? 'linux-x86_64-appimage' : 'linux-aarch64-appimage';
-        const arch = OS_ARCH === 'x86_64' ? 'x86_64' : 'aarch64';
-        const downloadUrl = data.platforms[platformKey]?.url as string;
-        const appImageFileName = `Readest_${data.version}_${arch}.AppImage`;
-        const appImageFilePath = await join(await desktopDir(), appImageFileName);
-        setUpdate({
-          currentVersion,
-          version: data.version,
-          date: data.pub_date,
-          body: data.notes,
-          downloadAndInstall: async (onEvent) => {
-            await downloadWithProgress(downloadUrl, appImageFilePath, onEvent);
-            try {
-              // Make the AppImage executable
-              const chmodCommand = Command.create('chmod-appimage', ['+x', appImageFilePath]);
-              await chmodCommand.execute();
-              console.log('AppImage made executable:', appImageFilePath);
-
-              // Launch the new AppImage
-              console.log('Launching new AppImage:', appImageFilePath);
-              const launchCommand = Command.create('launch-appimage', [appImageFilePath]);
-              await launchCommand.spawn();
-              console.log('New AppImage launched, exiting current app...');
-              setTimeout(async () => {
-                await exit(0);
-              }, 500);
-            } catch (error) {
-              console.error('Failed to launch new AppImage:', error);
-            }
-          },
-        } as GenericUpdate);
-      }
-    };
-    const buildNightlyUpdate = (n: ResolvedNightlyUpdate): GenericUpdate => ({
-      currentVersion,
-      version: n.version,
-      date: n.pubDate,
-      body: n.notes,
-      downloadAndInstall: async (onEvent) => {
-        if (TAURI_UPDATER_KEYS.has(n.platformKey)) {
-          // macOS / Windows-NSIS: Tauri updater (verify + install +
-          // relaunch). A 0 contentLength (server omitted Content-Length) is
-          // tolerated: we only emit 'Started' once a non-zero total arrives so
-          // the percent math never divides by zero.
-          let total = 0;
-          let lastDownloaded = 0;
-          await installNightlyUpdate(n.endpoint, (p) => {
-            if (p.event === 'progress') {
-              if (!total && p.contentLength) {
-                total = p.contentLength;
-                onEvent?.({ event: 'Started', data: { contentLength: total } });
-              }
-              // p.downloaded is a cumulative running total from Rust, but the
-              // consumer treats chunkLength as a per-chunk delta, so convert.
-              onEvent?.({
-                event: 'Progress',
-                data: { chunkLength: p.downloaded - lastDownloaded },
-              });
-              lastDownloaded = p.downloaded;
-            } else if (p.event === 'finished') {
-              onEvent?.({ event: 'Finished' });
-            }
-          });
-          return;
-        }
-        // Windows-portable / Linux-AppImage / Android: download, verify, install.
-        const fileName = n.url.split('/').pop() || `Readest_${n.version}`;
-        let filePath: string;
-        if (n.platformKey.includes('portable')) {
-          // Windows portable: write into the executable dir so the new exe
-          // replaces the running one in place (mirrors checkWindowsPortableUpdate).
-          const execDir = await invoke<string>('get_executable_dir');
-          filePath = await join(execDir, fileName);
-        } else {
-          filePath = await appService!.resolveFilePath(fileName, 'Cache');
-        }
-        await downloadWithProgress(n.url, filePath, onEvent);
-        const ok = await verifyUpdateSignature(filePath, n.signature, READEST_UPDATER_PUBKEY);
-        if (!ok) {
-          console.error('Nightly signature verification failed; aborting install');
-          throw new Error('Signature verification failed');
-        }
-        if (n.platformKey.startsWith('android')) {
-          const res = await installPackage({ path: filePath });
-          if (!res.success) console.error('Failed to install APK:', res.error);
-        } else if (n.platformKey.includes('appimage')) {
-          const chmod = Command.create('chmod-appimage', ['+x', filePath]);
-          await chmod.execute();
-          const launch = Command.create('launch-appimage', [filePath]);
-          await launch.spawn();
-          setTimeout(async () => {
-            await exit(0);
-          }, 500);
-        } else {
-          // windows portable
-          const command = Command.create('start-readest', ['/C', 'start', '', filePath]);
-          await command.spawn();
-          setTimeout(async () => {
-            await exit(0);
-          }, 500);
-        }
-      },
-    });
-    const checkForUpdates = async () => {
-      if (nightlyUpdate) {
-        setUpdate(buildNightlyUpdate(nightlyUpdate));
-        return;
-      }
-      const OS_TYPE = osType();
-      try {
-        if (appService?.isPortableApp && OS_TYPE === 'windows') {
-          await checkWindowsPortableUpdate();
-        } else if (appService?.isAppImage) {
-          await checkAppImageUpdate();
-        } else if (['macos', 'windows', 'linux'].includes(OS_TYPE)) {
-          await checkDesktopUpdate();
-        } else if (OS_TYPE === 'android') {
-          await checkAndroidUpdate();
-        }
-      } catch (err) {
-        console.error('Failed to check for updates:', err);
-        setError(_('Failed to check for updates'));
-      }
-    };
-    if (appService?.hasUpdater && checkUpdate) {
-      checkForUpdates();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [appService?.hasUpdater, nightlyUpdate]);
 
   useEffect(() => {
     if (latestVersion) {
