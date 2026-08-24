@@ -65,7 +65,7 @@ export const isCloudSyncInPlan = (plan: UserPlan): boolean =>
  * Every gate goes through {@link isCloudSyncAllowed}, so this flag is the
  * whole toggle.
  */
-export const CLOUD_SYNC_REQUIRES_PREMIUM = true;
+export const CLOUD_SYNC_REQUIRES_PREMIUM = false;
 
 /**
  * Whether third-party cloud sync is available for a plan. Falls back to the
@@ -93,7 +93,7 @@ export const isTTSCacheInPlan = (plan: UserPlan): boolean =>
  * automatic playback cache (audio kept as the user listens) is unaffected —
  * only the explicit download UI is gated.
  */
-export const TTS_CACHE_REQUIRES_PREMIUM = true;
+export const TTS_CACHE_REQUIRES_PREMIUM = false;
 
 export const isTTSCacheAllowed = (plan: UserPlan): boolean =>
   !TTS_CACHE_REQUIRES_PREMIUM || isTTSCacheInPlan(plan);
