@@ -100,7 +100,7 @@ flipping their master switches, which is P1.
 - **Why not configuration**: no flag guards the render.
 - **Conflict risk**: **medium.** Props-shape coupling, as P2.
 - **When it breaks**: type error at the call site. Widen the props interface.
-- **Status**: not applied
+- **Status**: applied
 
 ### P4 — Remove the upgrade entry from the settings menu
 
