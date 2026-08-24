@@ -27,7 +27,7 @@ here would buy permanent upgrade cost for nothing.
 | No Sentry crash reporting | Do not set `SENTRY_DSN`. `src-tauri/src/sentry_config.rs::dsn_from_env` maps unset or empty to `None`, and `scripts/upload-sourcemaps.mjs` no-ops without `SENTRY_AUTH_TOKEN`. Upstream built this for fork builds. | `android.md` |
 | Signup restricted to an allowlist | GoTrue `before_user_created` hook backed by a database function. Confirmed present in `supabase/auth` v2.185.0 as `HookConfiguration.BeforeUserCreated`. | `deployment.md` |
 | Android app talks to our server | Baked configuration: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_API_BASE_URL`, `NEXT_PUBLIC_NODE_BASE_URL`. The Tauri build has no runtime injection, so these are the whole story. | `android.md` |
-| OPDS proxy served by us | `NEXT_PUBLIC_NODE_BASE_URL` pointed at our origin. The route `apps/readest-app/src/app/api/opds/proxy/route.ts` ships in our image, so it answers. | `android.md` |
+| OPDS proxy served by us | On the web, the runtime config's `apiBaseUrl` is used through P5's `getNodeBaseUrl()` fallback chain; on Android, `NEXT_PUBLIC_NODE_BASE_URL` points at our origin. The route `apps/readest-app/src/app/api/opds/proxy/route.ts` ships in our image, so it answers. | `android.md`, `deployment.md` |
 | CJK webfonts served by us | `FONT_BASE_URL` for web, `NEXT_PUBLIC_FONT_BASE_URL` for Android. Readest's CDN only sends CORS headers to readest.com origins. | `deployment.md` |
 | Tauri CSP permits our server | Nothing to do. `connect-src` in `src-tauri/tauri.conf.json` already contains `https://*:*`. | — |
 
@@ -174,8 +174,9 @@ flipping their master switches, which is P1.
 
 ### P5 — Neutralize the baked official defaults
 
-- **Target**: `apps/readest-app/.env` — a file upstream commits to the tree
-- **Change**: two different treatments, and the difference matters.
+- **Target**: `apps/readest-app/.env` — a file upstream commits to the tree —
+  and `apps/readest-app/src/services/environment.ts`
+- **Change**: two different treatments for `.env`, and the difference matters.
   - **Blank** these four outright:
     `NEXT_PUBLIC_DEFAULT_POSTHOG_URL_BASE64`,
     `NEXT_PUBLIC_DEFAULT_POSTHOG_KEY_BASE64`,
@@ -185,6 +186,11 @@ flipping their master switches, which is P1.
     `NEXT_PUBLIC_DEFAULT_SUPABASE_URL_BASE64` (base64 of
     `https://placeholder.invalid`) and `NEXT_PUBLIC_DEFAULT_SUPABASE_KEY_BASE64`
     (base64 of any non-empty dummy string).
+  - In `environment.ts`, extend `getNodeBaseUrl()`'s fallback chain with
+    `getRuntimeConfig()?.apiBaseUrl`, then `API_BASE_URL`, then
+    `NEXT_PUBLIC_API_BASE_URL`, before `READEST_NODE_BASE_URL`. The literal
+    `NEXT_PUBLIC_NODE_BASE_URL` member expression still wins, so Tauri/Android
+    builds keep their baked value.
 - **Effect**: removes the base64-obfuscated production credentials upstream ships
   in-tree. PostHog is the one that matters. `context/PHContext.tsx` calls
   `posthog.init` at module scope with the baked key against
@@ -196,6 +202,16 @@ flipping their master switches, which is P1.
   `process.env['NEXT_PUBLIC_POSTHOG_KEY'] || atob(process.env['NEXT_PUBLIC_DEFAULT_POSTHOG_KEY_BASE64']!)`.
   An empty override is falsy and falls through to the baked default, so the
   default itself has to go.
+- **Effect of the `getNodeBaseUrl()` change**: in the web container the runtime
+  config injects `apiBaseUrl` through `/runtime-config.js`, so the Standard
+  Ebooks OPDS proxy in `opdsReq.ts` resolves to our server origin instead of
+  `https://node.readest.com`, which does not exist here. `NEXT_PUBLIC_NODE_BASE_URL`
+  still wins on Tauri/Android builds, and `READEST_NODE_BASE_URL` remains the
+  last-resort default when nothing is configured.
+- **Tests**: `src/__tests__/services/environment.test.ts` asserts that
+  `getNodeBaseUrl()` falls back to `window.__READEST_RUNTIME_CONFIG.apiBaseUrl`
+  when `NEXT_PUBLIC_NODE_BASE_URL` is unset. `src/__tests__/utils/supabase-storage-key.test.ts`
+  asserts the baked default is the neutralized `https://placeholder.invalid` URL.
 - **Why the Supabase defaults are placeholders rather than blank.**
   `utils/supabase.ts` calls `createClient` at module scope, and supabase-js v2.76
   validates the URL inside its constructor (`validateSupabaseUrl`) and rejects an
@@ -211,7 +227,7 @@ flipping their master switches, which is P1.
   silently syncing a user's library into Readest's own Supabase.
 - **Conflict risk**: **low.** Upstream rarely edits this file and a conflict here
   is trivial.
-- **Status**: not applied
+- **Status**: applied
 
 ### P6 — DeepLX translation adapter
 

@@ -144,6 +144,15 @@ describe('environment', () => {
       expect(getNodeBaseUrl()).toBe('https://custom-node.example.com');
     });
 
+    test('falls back to the runtime-configured apiBaseUrl when NEXT_PUBLIC_NODE_BASE_URL is not set', async () => {
+      delete env['NEXT_PUBLIC_NODE_BASE_URL'];
+      window.__READEST_RUNTIME_CONFIG = {
+        apiBaseUrl: 'https://runtime-api.example.com',
+      };
+      const { getNodeBaseUrl } = await import('@/services/environment');
+      expect(getNodeBaseUrl()).toBe('https://runtime-api.example.com');
+    });
+
     test('falls back to READEST_NODE_BASE_URL when env var not set', async () => {
       delete env['NEXT_PUBLIC_NODE_BASE_URL'];
       const { getNodeBaseUrl } = await import('@/services/environment');

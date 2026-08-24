@@ -19,7 +19,11 @@ export const getBaseUrl = () =>
   process.env['NEXT_PUBLIC_API_BASE_URL'] ??
   READEST_WEB_BASE_URL;
 export const getNodeBaseUrl = () =>
-  process.env['NEXT_PUBLIC_NODE_BASE_URL'] ?? READEST_NODE_BASE_URL;
+  process.env['NEXT_PUBLIC_NODE_BASE_URL'] ??
+  getRuntimeConfig()?.apiBaseUrl ??
+  process.env['API_BASE_URL'] ??
+  process.env['NEXT_PUBLIC_API_BASE_URL'] ??
+  READEST_NODE_BASE_URL;
 
 /**
  * Whether window move/resize has to be driven from JS with pointer events.

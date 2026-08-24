@@ -13,9 +13,11 @@ describe('supabase session storage key', () => {
     vi.unstubAllEnvs();
   });
 
-  it('defaults to the Readest Cloud project URL', () => {
+  // P5 (deploy/docs/patch-ledger.md) replaces the baked Readest Cloud project
+  // URL with a neutralized placeholder.
+  it('defaults to the neutralized placeholder URL', () => {
     expect(atob(process.env['NEXT_PUBLIC_DEFAULT_SUPABASE_URL_BASE64']!)).toBe(
-      'https://vbsyxfusjjqdxkjqlysc.supabase.co',
+      'https://placeholder.invalid',
     );
   });
 
