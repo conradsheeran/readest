@@ -195,7 +195,7 @@ flipping their master switches, which is P1.
 - **Conflict risk**: **medium**, but mechanical. When upstream edits a file we
   deleted, the rebase reports a delete/modify conflict. The resolution is always
   `git rm` — keep it deleted — and `git rerere` remembers it.
-- **Status**: not applied
+- **Status**: applied
 
 ### P8 — Make the client-side storage type reachable in Tauri builds
 
