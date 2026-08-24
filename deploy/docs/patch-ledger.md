@@ -160,7 +160,7 @@ flipping their master switches, which is P1.
   silently syncing a user's library into Readest's own Supabase.
 - **Conflict risk**: **low.** Upstream rarely edits this file and a conflict here
   is trivial.
-- **Status**: not applied
+- **Status**: applied
 
 ### P6 — DeepLX translation adapter
 
