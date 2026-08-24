@@ -2,11 +2,11 @@
 
 The authority on what this fork changes in upstream source, and why.
 
-**Status: specification only.** Every entry below is a decision reached and
-verified against upstream `v0.12.1`; none of the source patches have been written
-yet. `git diff upstream..main` currently shows only `deploy/`. Implementing an
-entry means writing the patch *and* moving its status to `applied` in the same
-commit.
+**Each entry's `Status` field is the authority on whether that patch is applied.**
+Every entry below is a decision reached and verified against upstream `v0.12.1`.
+Implementing an entry means writing the patch *and* moving its status to
+`applied` in the same commit, so that the ledger and `git diff upstream..main`
+never disagree.
 
 Verified against upstream `v0.12.1` (`f3e1df7`). Line numbers come from that tag
 and are a starting point for a search, not an anchor — locate code by its
