@@ -247,7 +247,7 @@ flipping their master switches, which is P1.
 - **Why not configuration**: the URLs are constants with no environment hook.
 - **Conflict risk**: **medium.** Two files, and the updater is occasionally
   reworked upstream. Re-apply by intent: find the manifest fetch, stop it.
-- **Status**: not applied
+- **Status**: applied
 
 ---
 

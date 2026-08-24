@@ -1,39 +1,14 @@
 import semver from 'semver';
-import { check } from '@tauri-apps/plugin-updater';
-import { type as osType, arch as osArch } from '@tauri-apps/plugin-os';
 import { fetch } from '@tauri-apps/plugin-http';
-import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
-import { ScrollBarStyle } from '@tauri-apps/api/window';
 import { TranslationFunc } from '@/hooks/useTranslation';
 import { setUpdaterWindowVisible } from '@/components/UpdaterWindow';
 import { isTauriAppPlatform } from '@/services/environment';
 import { getAppVersion, isUpdateNewer } from '@/utils/version';
 import {
-  CHECK_UPDATE_INTERVAL_SEC,
   READEST_CHANGELOG_FILE,
   READEST_UPDATER_FILE,
   READEST_NIGHTLY_UPDATER_FILE,
 } from '@/services/constants';
-
-const LAST_CHECK_KEY = 'lastAppUpdateCheck';
-
-const showUpdateWindow = (latestVersion: string, scrollBarStyle: ScrollBarStyle) => {
-  const win = new WebviewWindow('updater', {
-    url: `/updater?latestVersion=${latestVersion}`,
-    title: 'Software Update',
-    width: 626,
-    height: 406,
-    center: true,
-    resizable: true,
-    scrollBarStyle,
-  });
-  win.once('tauri://created', () => {
-    console.log('new window created');
-  });
-  win.once('tauri://error', (e) => {
-    console.error('error creating window', e);
-  });
-};
 
 type FetchFn = typeof fetch;
 
@@ -135,77 +110,23 @@ export const resolveNightlyUpdate = async (
   return candidates[0]!;
 };
 
+/**
+ * Self-hosted no-op — see deploy/docs/patch-ledger.md (P9).
+ *
+ * Upstream asks `download.readest.com` for the newest *official* release.
+ * In this fork that offers the stock Readest build as an update to our own, and
+ * accepting one replaces the self-hosted app — server configuration, patches and
+ * all. Repointing the feed at ours was rejected on cost: the Tauri updater
+ * verifies artifacts against a minisign key hardcoded in `services/constants.ts`.
+ *
+ * The signature is kept for the three call sites (library, reader, and the About
+ * window's manual check). `false` reads as "no update available" at each of them.
+ */
 export const checkForAppUpdates = async (
   _: TranslationFunc,
-  isAutoCheck = true,
-  updateChannel: 'stable' | 'nightly' = 'stable',
-): Promise<boolean> => {
-  const lastCheck = localStorage.getItem(LAST_CHECK_KEY);
-  const now = Date.now();
-  if (isAutoCheck && lastCheck && now - parseInt(lastCheck, 10) < CHECK_UPDATE_INTERVAL_SEC * 1000)
-    return false;
-  localStorage.setItem(LAST_CHECK_KEY, now.toString());
-
-  console.log('Checking for updates', { updateChannel });
-  const OS_TYPE = osType();
-
-  try {
-    if (updateChannel === 'nightly') {
-      const platformKey = getNightlyPlatformKey(
-        OS_TYPE,
-        osArch(),
-        Boolean(process.env['NEXT_PUBLIC_PORTABLE_APP']),
-        Boolean((window as { __READEST_IS_APPIMAGE?: boolean }).__READEST_IS_APPIMAGE),
-      );
-      if (!platformKey) return false;
-      const resolved = await resolveNightlyUpdate(getAppVersion(), platformKey, fetch);
-      if (resolved) {
-        setUpdaterWindowVisible(true, resolved.version, getAppVersion(), true, resolved);
-        return true;
-      }
-      return false;
-    }
-
-    if (['macos', 'windows', 'linux'].includes(OS_TYPE)) {
-      const update = await check();
-      if (update) {
-        // Enum ScrollBarStyle is exported as type by tauri, so it cannot be used directly.
-        const scrollBarStyle = (OS_TYPE === 'windows'
-          ? 'fluentOverlay'
-          : 'default') as unknown as ScrollBarStyle;
-        showUpdateWindow(update.version, scrollBarStyle);
-      }
-      return !!update;
-    } else if (OS_TYPE === 'android') {
-      try {
-        const response = await fetch(READEST_UPDATER_FILE, { connectTimeout: 5000 });
-        const data = await response.json();
-        const isNewer = semver.gt(data.version, getAppVersion());
-        if (
-          isNewer &&
-          ('android-arm64' in data.platforms || 'android-universal' in data.platforms)
-        ) {
-          setUpdaterWindowVisible(true, data.version!, getAppVersion());
-        }
-        return isNewer;
-      } catch (err) {
-        console.warn('Failed to fetch Android update info', err);
-        throw new Error('Failed to fetch Android update info');
-      }
-    }
-
-    return false;
-  } catch (err) {
-    // Update checks are best-effort: they fail routinely when offline or when
-    // the release host is unreachable. An auto-check runs fire-and-forget on
-    // mount, so throwing here becomes an unhandled rejection (READEST-J desktop
-    // latest.json, READEST-22 Android update info). Only surface the failure for
-    // a manual check (About window).
-    console.warn('Update check failed', err);
-    if (!isAutoCheck) throw err;
-    return false;
-  }
-};
+  _isAutoCheck = true,
+  _updateChannel: 'stable' | 'nightly' = 'stable',
+): Promise<boolean> => false;
 
 const LAST_SHOWN_RELEASE_NOTES_KEY = 'lastShownReleaseNotesVersion';
 
