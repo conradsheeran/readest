@@ -140,15 +140,18 @@ flipping their master switches, which is P1.
 ### P3 — Remove the plan comparison panel
 
 - **Target**: `apps/readest-app/src/app/user/components/PlansComparison.tsx`
-- **Change**: reduce to a component that returns `null`.
+- **Change**: reduce to a component that returns `null`, keeping an optional
+  `customizationPurchased?: boolean` in its props interface for the v0.12.20
+  call site.
 - **Effect**: removes the four-plan comparison carousel from the profile page.
   `app/user/page.tsx` renders it **unconditionally** — it does not check the
   user's plan — so it is visible on every self-hosted deployment regardless of P1
   or of what the plan claim says.
 - **Why not configuration**: no flag guards the render.
+- **Tests**: `plans-comparison.test.tsx` asserts the stub renders nothing.
 - **Conflict risk**: **medium.** Props-shape coupling, as P2.
 - **When it breaks**: type error at the call site. Widen the props interface.
-- **Status**: not applied
+- **Status**: applied
 
 ### P4 — Remove the upgrade entry from the settings menu
 
