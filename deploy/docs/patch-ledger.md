@@ -223,7 +223,7 @@ flipping their master switches, which is P1.
   sufficient — nothing on the client path reads the `NEXT_PUBLIC_` form today.
   The patch is what makes the configuration take effect.
 - **Conflict risk**: **low.** One expression in a small, stable file.
-- **Status**: not applied
+- **Status**: applied
 
 ---
 
