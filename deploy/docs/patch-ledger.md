@@ -124,13 +124,16 @@ flipping their master switches, which is P1.
 ### P5 — Neutralize the baked official defaults
 
 - **Target**: `apps/readest-app/.env` — a file upstream commits to the tree
-- **Change**: blank these six values:
-  `NEXT_PUBLIC_DEFAULT_POSTHOG_URL_BASE64`,
-  `NEXT_PUBLIC_DEFAULT_POSTHOG_KEY_BASE64`,
-  `NEXT_PUBLIC_DEFAULT_SUPABASE_URL_BASE64`,
-  `NEXT_PUBLIC_DEFAULT_SUPABASE_KEY_BASE64`,
-  `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY_BASE64`,
-  `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY_DEV_BASE64`.
+- **Change**: two different treatments, and the difference matters.
+  - **Blank** these four outright:
+    `NEXT_PUBLIC_DEFAULT_POSTHOG_URL_BASE64`,
+    `NEXT_PUBLIC_DEFAULT_POSTHOG_KEY_BASE64`,
+    `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY_BASE64`,
+    `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY_DEV_BASE64`.
+  - **Replace with placeholders** — not blank — these two:
+    `NEXT_PUBLIC_DEFAULT_SUPABASE_URL_BASE64` (base64 of
+    `https://placeholder.invalid`) and `NEXT_PUBLIC_DEFAULT_SUPABASE_KEY_BASE64`
+    (base64 of any non-empty dummy string).
 - **Effect**: removes the base64-obfuscated production credentials upstream ships
   in-tree. PostHog is the one that matters. `context/PHContext.tsx` calls
   `posthog.init` at module scope with the baked key against
@@ -142,21 +145,19 @@ flipping their master switches, which is P1.
   `process.env['NEXT_PUBLIC_POSTHOG_KEY'] || atob(process.env['NEXT_PUBLIC_DEFAULT_POSTHOG_KEY_BASE64']!)`.
   An empty override is falsy and falls through to the baked default, so the
   default itself has to go.
-- **Critical caveat — the Supabase defaults cannot simply be blanked.**
-  `utils/supabase.ts` calls `createClient` at module scope, and supabase-js
-  v2.76 validates the URL inside its constructor (`validateSupabaseUrl`), so an
-  empty value throws at import time. That module is reachable from nearly every
-  page, so `next build` fails outright. Therefore:
-  - **Android build** — real values are supplied, so blanking the defaults is
-    both safe and desirable: a misconfigured build now fails loudly instead of
-    shipping an APK pointed at `readest.supabase.co`.
-  - **Web image build** — no real values exist at build time, because runtime
-    config supplies them. The build must pass a syntactically valid placeholder,
-    for example `https://placeholder.invalid` and a dummy key. Runtime config
-    overrides it in the container. This is still strictly better than leaving
-    upstream's real default baked in: if runtime injection ever fails, the app
-    fails to connect rather than syncing a user's library into Readest's own
-    Supabase.
+- **Why the Supabase defaults are placeholders rather than blank.**
+  `utils/supabase.ts` calls `createClient` at module scope, and supabase-js v2.76
+  validates the URL inside its constructor (`validateSupabaseUrl`) and rejects an
+  empty key. That module is reachable from nearly every page, so blanking those
+  two values makes `next build` fail outright.
+
+  A placeholder keeps both builds working with no extra plumbing — no build args,
+  no generated `.env` in CI. The web image builds against
+  `https://placeholder.invalid` and the container's runtime config overrides it;
+  the Android build overrides it from `.env.local` with the real values. Either
+  way, upstream's real credentials are gone, which is the point: if configuration
+  is ever missing or runtime injection fails, the app fails to connect instead of
+  silently syncing a user's library into Readest's own Supabase.
 - **Conflict risk**: **low.** Upstream rarely edits this file and a conflict here
   is trivial.
 - **Status**: not applied
@@ -226,39 +227,67 @@ flipping their master switches, which is P1.
 
 ---
 
-## Part 3 — Open decisions
+### P9 — Disable the in-app updater
 
-Known changes with no decision recorded. Do not implement one without resolving
-it first.
+- **Target**: `apps/readest-app/src/helpers/updater.ts` and
+  `apps/readest-app/src/components/UpdaterWindow.tsx`
+- **Change**: make the update check a no-op and remove its entry point.
+- **Effect**: the app stops fetching
+  `https://download.readest.com/releases/latest.json`. Without this, our APK
+  presents **official** Readest releases as available updates, and accepting one
+  replaces the self-hosted app with the stock build — server configuration,
+  patches and all.
+- **Why not repoint it at our own feed**: the Tauri updater verifies artifacts
+  against `READEST_UPDATER_PUBKEY`, a minisign public key hardcoded in
+  `services/constants.ts` and mirrored in `src-tauri/tauri.conf.json`. Publishing
+  our own feed would mean generating a keypair, replacing that constant, signing
+  every release, and safeguarding a second long-lived private key. For a
+  single-operator deployment where the APK is installed by hand anyway, the
+  updater has no value to justify that.
+- **Why not configuration**: the URLs are constants with no environment hook.
+- **Conflict risk**: **medium.** Two files, and the updater is occasionally
+  reworked upstream. Re-apply by intent: find the manifest fetch, stop it.
+- **Status**: not applied
 
-### O1 — The in-app updater
+---
 
-`src/helpers/updater.ts` and `src/components/UpdaterWindow.tsx` fetch
-`https://download.readest.com/releases/latest.json`. In our APK that offers
-**official** Readest builds as updates, which would replace the self-hosted app
-with the stock one. Something has to change here; the question is whether to
-disable the updater outright or repoint it at a release feed we publish. Both are
-patches to constants in `src/services/constants.ts`; the second also requires us
-to publish and sign a manifest.
+## Part 3 — Resolved decisions
 
-### O2 — `assets.readest.com` in the public media upload path
+Recorded so they are not relitigated. Each was an open question during the design
+session; the resolution is below.
 
-`pages/api/storage/upload.ts` returns
-`downloadUrl: ${READEST_PUBLIC_ASSETS_BASE_URL}/${fileKey}` for the `media`
-branch (published book covers) and uploads into `TEMP_STORAGE_PUBLIC_BUCKET_NAME`,
-a variable upstream's own self-host `.env.example` never defines. The feature is
-broken here in two independent ways. Decide whether to fix it or record it as an
-accepted limitation.
+### O1 — The in-app updater → **disable it**
 
-### O3 — The WordLens glossary CDN
+Promoted to patch **P9**. Repointing the updater at our own release feed was
+rejected on cost: it requires a minisign keypair, a constant replacement, and
+per-release signing.
 
-`src/services/wordlens/glossPacks.ts` downloads dictionary packs from
-`https://cdn.readest.com/wordlens`. This is a working optional feature rather
-than telemetry, but it is still a call to third-party infrastructure. Decide how
-far "pure" extends.
+### O2 — `assets.readest.com` in the public media upload path → **accepted limitation**
 
-### O4 — Residual plan wording
+Not fixed. `pages/api/storage/upload.ts` uploads the `media` branch into
+`TEMP_STORAGE_PUBLIC_BUCKET_NAME` — a variable upstream's own self-host
+`.env.example` never defines — and returns a `downloadUrl` on Readest's CDN, so
+published book covers are broken here in two independent ways.
 
-With plans left at `free`, `UserInfo` still renders a plan name on the profile
-page. Cosmetic. Assess after the first successful build rather than patching
-speculatively.
+Fixing it means standing up a publicly readable bucket with its own domain and
+making the constant configurable: new infrastructure, in exchange for share-link
+and Discord-presence cover images. Revisit if share links are ever actually used.
+Recorded in `known-limitations.md`.
+
+### O3 — The WordLens glossary CDN → **keep it**
+
+`services/wordlens/glossPacks.ts` continues to download dictionary packs from
+`https://cdn.readest.com/wordlens`.
+
+This is not telemetry. It reports nothing and downloads public static files. The
+goal of this fork is to be free of billing, tracking, and dependence on an
+official account; fetching a static asset violates none of those. Mirroring the
+packs onto our own domain remains possible later if full offline operation
+becomes a requirement.
+
+### O4 — Residual plan wording → **deferred until after the first build**
+
+`UserInfo` renders a plan name on the profile page, and every user here is
+`free`. Deciding now would be guesswork: P2 and P3 substantially rework that
+page, so look at what actually remains once they are applied rather than
+patching speculatively.
