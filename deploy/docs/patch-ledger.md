@@ -119,7 +119,7 @@ flipping their master switches, which is P1.
   upstream restructures the destructure. Re-apply by intent rather than by patch
   text: find the upgrade item, delete it, then delete whatever that leaves
   unused.
-- **Status**: not applied
+- **Status**: applied
 
 ### P5 — Neutralize the baked official defaults
 
