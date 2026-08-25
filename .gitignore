@@ -1,6 +1,13 @@
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 docker/.env
 
+.env
+compose.yml
+compose.override.yml
+docker-compose.override.yml
+docker-compose.yml
+data/
+
 # dependencies
 /node_modules
 /.pnp
