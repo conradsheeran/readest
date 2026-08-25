@@ -3,7 +3,9 @@ docker/.env
 
 .env
 compose.yml
+compose.yaml
 compose.override.yml
+compose.override.yaml
 docker-compose.override.yml
 docker-compose.yml
 data/
