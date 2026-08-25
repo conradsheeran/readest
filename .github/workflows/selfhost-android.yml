@@ -1,0 +1,142 @@
+name: Selfhost — Android APK
+
+on:
+  workflow_dispatch:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: recursive
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+
+      - name: Setup Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Setup Java (for Android)
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: zulu
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4
+
+      - name: Install NDK
+        run: sdkmanager "ndk;28.2.13676358"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --prefer-offline
+
+      - name: Setup vendors
+        run: pnpm --filter @readest/readest-app setup-vendors
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        with:
+          key: ubuntu-android-cargo
+
+      - name: Create .env.local for Android build
+        run: |
+          cat > apps/readest-app/.env.local <<'ENV'
+          NEXT_PUBLIC_APP_PLATFORM=tauri
+          ENV
+          echo "NEXT_PUBLIC_SUPABASE_URL=${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}" >> apps/readest-app/.env.local
+          echo "NEXT_PUBLIC_SUPABASE_ANON_KEY=${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}" >> apps/readest-app/.env.local
+          echo "NEXT_PUBLIC_API_BASE_URL=${{ secrets.NEXT_PUBLIC_API_BASE_URL }}" >> apps/readest-app/.env.local
+          echo "NEXT_PUBLIC_NODE_BASE_URL=${{ secrets.NEXT_PUBLIC_NODE_BASE_URL }}" >> apps/readest-app/.env.local
+          echo "NEXT_PUBLIC_OBJECT_STORAGE_TYPE=s3" >> apps/readest-app/.env.local
+          echo "NEXT_PUBLIC_STORAGE_FIXED_QUOTA=${{ secrets.NEXT_PUBLIC_STORAGE_FIXED_QUOTA }}" >> apps/readest-app/.env.local
+          echo "NEXT_PUBLIC_TRANSLATION_FIXED_QUOTA=${{ secrets.NEXT_PUBLIC_TRANSLATION_FIXED_QUOTA }}" >> apps/readest-app/.env.local
+          echo "NEXT_PUBLIC_FONT_BASE_URL=${{ secrets.NEXT_PUBLIC_FONT_BASE_URL }}" >> apps/readest-app/.env.local
+          cat apps/readest-app/.env.local
+
+      - name: Get version
+        id: version
+        run: echo "PACKAGE_VERSION=$(node -p \"require('./apps/readest-app/package.json').version\")" >> "$GITHUB_ENV"
+
+      - name: Build Android APKs
+        env:
+          NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/28.2.13676358
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ANDROID_KEY_BASE64: ${{ secrets.ANDROID_KEY_BASE64 }}
+        run: |
+          cd apps/readest-app
+          rm -rf src-tauri/gen/android
+          pnpm tauri android init
+          pnpm tauri icon ../../data/icons/readest-book.png
+          git checkout .
+
+          pushd src-tauri/gen/android
+          cat > keystore.properties <<CONF
+          keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}
+          password=${{ secrets.ANDROID_KEY_PASSWORD }}
+          storeFile=$RUNNER_TEMP/keystore.jks
+          CONF
+          echo "$ANDROID_KEY_BASE64" | base64 -d > "$RUNNER_TEMP/keystore.jks"
+          popd
+
+          version=${{ env.PACKAGE_VERSION }}
+          # Fallback when release event provides tag
+          if [ -z "$version" ]; then
+            version="${{ github.event.release.tag_name }}"
+            version="${version#v}"
+          fi
+          echo "Building version $version"
+
+          apk_path="src-tauri/gen/android/app/build/outputs/apk/universal/release"
+          universal_apk="Readest_${version}_universal.apk"
+          arm64_apk="Readest_${version}_arm64.apk"
+
+          pnpm tauri android build
+          cp "${apk_path}/app-universal-release.apk" "${universal_apk}"
+
+          pnpm tauri android build -t aarch64
+          cp "${apk_path}/app-universal-release.apk" "${arm64_apk}"
+
+          ls -lh "${universal_apk}" "${arm64_apk}"
+          echo "universal_apk=${universal_apk}" >> "$GITHUB_ENV"
+          echo "arm64_apk=${arm64_apk}" >> "$GITHUB_ENV"
+
+      - name: Upload APKs to release
+        if: github.event_name == 'release'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd apps/readest-app
+          gh release upload "${{ github.event.release.tag_name }}" "${{ env.universal_apk }}" "${{ env.arm64_apk }}" --clobber
+          echo "Uploaded ${{ env.universal_apk }} and ${{ env.arm64_apk }}"
+
+      - name: Upload APK artifacts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: apk-${{ env.PACKAGE_VERSION }}
+          path: |
+            apps/readest-app/Readest_*_universal.apk
+            apps/readest-app/Readest_*_arm64.apk
+          if-no-files-found: error
+          retention-days: 7
