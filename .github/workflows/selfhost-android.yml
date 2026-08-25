@@ -76,7 +76,7 @@ jobs:
 
       - name: Get version
         id: version
-        run: echo "PACKAGE_VERSION=$(node -p \"require('./apps/readest-app/package.json').version\")" >> "$GITHUB_ENV"
+        run: echo "PACKAGE_VERSION=$(jq -r .version apps/readest-app/package.json)" >> "$GITHUB_ENV"
 
       - name: Build Android APKs
         env:
