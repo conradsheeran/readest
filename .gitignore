@@ -8,7 +8,7 @@ compose.override.yml
 compose.override.yaml
 docker-compose.override.yml
 docker-compose.yml
-data/
+.data/
 
 # dependencies
 /node_modules
