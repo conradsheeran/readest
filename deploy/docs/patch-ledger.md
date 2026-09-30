@@ -3,12 +3,12 @@
 The authority on what this fork changes in upstream source, and why.
 
 **Each entry's `Status` field is the authority on whether that patch is applied.**
-Every entry below is a decision reached and verified against upstream `v0.12.1`.
+Every entry below is a decision reached and verified against upstream `v0.12.10`.
 Implementing an entry means writing the patch *and* moving its status to
 `applied` in the same commit, so that the ledger and `git diff upstream..main`
 never disagree.
 
-Verified against upstream `v0.12.1` (`f3e1df7`). Line numbers come from that tag
+Verified against upstream `v0.12.10` (`8a56831`). Line numbers come from that tag
 and are a starting point for a search, not an anchor — locate code by its
 surrounding text, never by line number.
 
@@ -51,12 +51,13 @@ flipping their master switches, which is P1.
 ### P1 — Open the premium feature gates
 
 - **Target**: `apps/readest-app/src/utils/access.ts`
-- **Change**: `CLOUD_SYNC_REQUIRES_PREMIUM = false` and
-  `TTS_CACHE_REQUIRES_PREMIUM = false`.
-- **Effect**: third-party cloud sync (WebDAV, Google Drive, S3) and the offline
-  TTS audio download stop requiring a paid plan. Upstream documents both
-  constants as master switches — "Every gate goes through `isCloudSyncAllowed`,
-  so this flag is the whole toggle" — so no call site needs touching, and the
+- **Change**: `CLOUD_SYNC_REQUIRES_PREMIUM = false`,
+  `TTS_CACHE_REQUIRES_PREMIUM = false`, `ABS_OFFLINE_REQUIRES_PREMIUM = false`,
+  and `NEARBY_PAIRING_REQUIRES_PREMIUM = false`.
+- **Effect**: third-party cloud sync (WebDAV, Google Drive, S3), the offline
+  TTS audio download, offline Audiobookshelf downloads, and Nearby BookDrop
+  trusted device pairing stop requiring a paid plan. Upstream documents these
+  constants as master switches, so no call site needs touching, and the
   Premium badges disappear with the gate.
 - **Why not configuration**: compile-time constants. No environment variable
   reads them.
@@ -179,9 +180,10 @@ flipping their master switches, which is P1.
 
 ### P7 — Delete upstream's workflows
 
-- **Target**: `.github/workflows/` — all nine files: `android-e2e`, `codeql`,
-  `docker-image`, `nightly`, `pull-request`, `release`, `scorecard`,
-  `upload-to-r2`, `vercel-merge`.
+- **Target**: `.github/workflows/` — all 13 files: `android-e2e`, `codeql`,
+  `docker-image`, `nightly`, `nix-build`, `nix-deps-check`, `nix-update-inputs`,
+  `pull-request`, `release`, `scorecard`, `try-appimage`, `upload-to-r2`,
+  `vercel-merge`.
 - **Change**: delete them. Only `selfhost-*.yml` remain.
 - **Effect**: stops upstream CI from firing in this fork. Five of the nine
   trigger on `push` to `main`. Worse, `release.yml` and `docker-image.yml`

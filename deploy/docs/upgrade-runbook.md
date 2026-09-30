@@ -110,7 +110,7 @@ runbook — run all of them, every time.
 ### 5a. New plan gates
 
 Upstream adds paywalls as a `*_REQUIRES_PREMIUM` master switch paired with a
-`*_PLANS` list. P1 flips the two that existed at `v0.12.1`. Find any new ones:
+`*_PLANS` list. P1 flips the four that existed at `v0.12.10`. Find any new ones:
 
 ```bash
 grep -rn "REQUIRES_PREMIUM\|_PLANS *:" apps/readest-app/src/utils/access.ts
@@ -149,7 +149,7 @@ it too and extend the ledger entry.
 git ls-tree --name-only refs/upstream/<NEW_TAG>:.github/workflows
 ```
 
-P7 deletes nine files. Anything new here will run in the fork unless it is also
+P7 deletes 13 files. Anything new here will run in the fork unless it is also
 deleted.
 
 ## 6. Prove it still compiles
