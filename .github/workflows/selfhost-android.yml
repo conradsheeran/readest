@@ -39,6 +39,8 @@ jobs:
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4
+        with:
+          packages: 'platform-tools'
 
       - name: Install NDK
         run: sdkmanager "ndk;28.2.13676358"
@@ -69,6 +71,7 @@ jobs:
           echo "NEXT_PUBLIC_API_BASE_URL=${{ secrets.NEXT_PUBLIC_API_BASE_URL }}" >> apps/readest-app/.env.local
           echo "NEXT_PUBLIC_NODE_BASE_URL=${{ secrets.NEXT_PUBLIC_NODE_BASE_URL }}" >> apps/readest-app/.env.local
           echo "NEXT_PUBLIC_OBJECT_STORAGE_TYPE=s3" >> apps/readest-app/.env.local
+          echo "NEXT_PUBLIC_SELF_HOSTED=true" >> apps/readest-app/.env.local
           echo "NEXT_PUBLIC_STORAGE_FIXED_QUOTA=${{ secrets.NEXT_PUBLIC_STORAGE_FIXED_QUOTA }}" >> apps/readest-app/.env.local
           echo "NEXT_PUBLIC_TRANSLATION_FIXED_QUOTA=${{ secrets.NEXT_PUBLIC_TRANSLATION_FIXED_QUOTA }}" >> apps/readest-app/.env.local
           echo "NEXT_PUBLIC_FONT_BASE_URL=${{ secrets.NEXT_PUBLIC_FONT_BASE_URL }}" >> apps/readest-app/.env.local

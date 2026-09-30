@@ -34,6 +34,7 @@ NEXT_PUBLIC_NODE_BASE_URL=https://read.conraaad.com
 
 # Required by patch P8 — without the patch this value is not read at all.
 NEXT_PUBLIC_OBJECT_STORAGE_TYPE=s3
+NEXT_PUBLIC_SELF_HOSTED=true
 
 NEXT_PUBLIC_STORAGE_FIXED_QUOTA=<same as the server>
 NEXT_PUBLIC_TRANSLATION_FIXED_QUOTA=<same as the server>
