@@ -320,6 +320,11 @@ flipping their master switches, which is P1.
   toggle still works.
 - **Conflict risk**: **medium.** Two files, and the updater is occasionally
   reworked upstream. Re-apply by intent: find the manifest fetch, stop it.
+- **Completed by**: **P12**. P9 silenced the manifest check but left the About
+  dialog's "Check Update" button and the startup release-notes fetch reaching
+  Readest's servers. P12 stubs `checkAppReleaseNotes`, removes the button, and
+  reconciles `src/__tests__/helpers/updater.test.ts` so both entry points are
+  asserted to return `false` without calling the Tauri updater or `fetch`.
 - **Status**: applied
 
 ---
@@ -384,6 +389,47 @@ flipping their master switches, which is P1.
 - **When it breaks**: a rebase conflict, or an unused-import lint error after
   `useTranslation` leaves `UserInfo`. Re-apply by intent: remove the pill, then
   remove whatever it leaves unused.
+- **Status**: applied
+
+---
+
+### P12 — Retire the update-check UI and startup release-notes fetch
+
+- **Target**: `apps/readest-app/src/helpers/updater.ts`,
+  `apps/readest-app/src/components/AboutWindow.tsx`,
+  `apps/readest-app/src/__tests__/helpers/updater.test.ts`, and
+  `apps/readest-app/src/__tests__/components/AboutWindow.test.tsx`
+- **Change**: make `checkAppReleaseNotes` a no-op returning `false`, removing
+  the five imports it orphaned (`semver`, `isTauriAppPlatform`,
+  `READEST_CHANGELOG_FILE`, `setUpdaterWindowVisible`, `getAppVersion`). Keep
+  `setLastShownReleaseNotesVersion` / `getLastShownReleaseNotesVersion` because
+  `UpdaterWindow.tsx` still imports the setter. In `AboutWindow`, delete the
+  "Check Update" button and all four `updateStatus` branches, then remove what
+  that orphans: the `UpdateStatus` type, the status state, both handlers, the
+  updater and settings-store imports, and `setUpdateStatus(null)` from
+  `handleClose`. The logo, version string, and click-to-copy behaviour stay.
+- **Effect**: completes P9. Neither the startup calls in `app/library/page.tsx`
+  and `app/reader/page.tsx` nor the About dialog can fetch
+  `https://download.readest.com/releases/release-notes.json` or open Readest's
+  official changelog. The About dialog no longer offers a check that cannot
+  check, and a version bump no longer pops upstream's "What's New in Readest".
+- **Why not configuration**: no flag guards either call site or the button, and
+  the URLs are constants with no environment hook.
+- **Tests**: `src/__tests__/helpers/updater.test.ts` is reconciled: it asserts
+  `checkForAppUpdates` resolves `false` for every channel and platform and
+  `checkAppReleaseNotes` resolves `false` for both auto and manual checks, and
+  that neither calls `check()`, the Tauri HTTP client, or `fetch`.
+  `src/__tests__/components/AboutWindow.test.tsx` asserts the dialog no longer
+  renders a "Check Update" button while the version label still copies.
+- **Conflict risk**: **medium.** `AboutWindow.tsx` is a small but active UI file,
+  and `updater.ts` is occasionally reworked upstream. Re-apply by intent: stub
+  the release-notes fetch, then delete the update-check block and whatever it
+  leaves unused. Keep `UpdaterWindow.tsx`, `UpdaterContent`, and
+  `app/updater/page.tsx` in place — unreachable, but deleting them adds rebase
+  surface for no user-visible gain.
+- **When it breaks**: a rebase conflict, or an unused-import lint error after
+  the update-check block leaves `AboutWindow`. Re-apply by removing the block,
+  then removing whatever it leaves unused.
 - **Status**: applied
 
 ---

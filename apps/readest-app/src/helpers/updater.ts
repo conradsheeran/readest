@@ -1,14 +1,7 @@
-import semver from 'semver';
 import { fetch } from '@tauri-apps/plugin-http';
 import { TranslationFunc } from '@/hooks/useTranslation';
-import { setUpdaterWindowVisible } from '@/components/UpdaterWindow';
-import { isTauriAppPlatform } from '@/services/environment';
-import { getAppVersion, isUpdateNewer } from '@/utils/version';
-import {
-  READEST_CHANGELOG_FILE,
-  READEST_UPDATER_FILE,
-  READEST_NIGHTLY_UPDATER_FILE,
-} from '@/services/constants';
+import { isUpdateNewer } from '@/utils/version';
+import { READEST_UPDATER_FILE, READEST_NIGHTLY_UPDATER_FILE } from '@/services/constants';
 
 type FetchFn = typeof fetch;
 
@@ -145,22 +138,16 @@ export const getLastShownReleaseNotesVersion = () => {
   return localStorage.getItem(LAST_SHOWN_RELEASE_NOTES_KEY) || '';
 };
 
-export const checkAppReleaseNotes = async (isAutoCheck = true) => {
-  const currentVersion = getAppVersion();
-  const lastShownVersion = getLastShownReleaseNotesVersion();
-  if ((lastShownVersion && semver.gt(currentVersion, lastShownVersion)) || !isAutoCheck) {
-    try {
-      const fetchFunc = isTauriAppPlatform() ? fetch : window.fetch;
-      const res = await fetchFunc(READEST_CHANGELOG_FILE);
-      if (res.ok) {
-        setUpdaterWindowVisible(true, currentVersion, lastShownVersion, false);
-        return true;
-      }
-    } catch (err) {
-      console.warn('Failed to fetch release notes', err);
-    }
-  } else if (!lastShownVersion) {
-    setLastShownReleaseNotesVersion(currentVersion);
-  }
-  return false;
-};
+/**
+ * Self-hosted no-op — see deploy/docs/patch-ledger.md (P12).
+ *
+ * Upstream fetches `READEST_CHANGELOG_FILE` from `download.readest.com` on
+ * startup and from the About window to show "What's New in Readest". Those are
+ * upstream's release notes, and the request is a hardcoded call to Readest's own
+ * infrastructure. This fork has no release-notes dialog to feed, so the check
+ * resolves `false` without a request.
+ *
+ * `setLastShownReleaseNotesVersion` / `getLastShownReleaseNotesVersion` stay:
+ * `UpdaterWindow.tsx` still imports the setter.
+ */
+export const checkAppReleaseNotes = async (_isAutoCheck = true): Promise<boolean> => false;

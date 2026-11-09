@@ -163,4 +163,11 @@ describe('AboutWindow version label', () => {
     expect(label.tagName).toBe('BUTTON');
     expect(label.getAttribute('title')).toBe('Copy');
   });
+
+  it('does not render the retired update-check button', async () => {
+    await openDialog();
+
+    expect(screen.queryByText('Check Update')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Check Update' })).toBeNull();
+  });
 });
