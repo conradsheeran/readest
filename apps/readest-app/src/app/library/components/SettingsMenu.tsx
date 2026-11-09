@@ -15,8 +15,6 @@ import { setCacheManagerDialogVisible } from '@/app/library/components/CacheMana
 import { useAuth } from '@/context/AuthContext';
 import { useEnv } from '@/context/EnvContext';
 import { useThemeStore } from '@/store/themeStore';
-import { useQuotaStats } from '@/hooks/useQuotaStats';
-import { isReadestCloudEnabled } from '@/services/sync/cloudSyncProvider';
 import { useLibraryStore } from '@/store/libraryStore';
 import { useSettingsStore } from '@/store/settingsStore';
 import { useTranslation } from '@/hooks/useTranslation';
@@ -38,7 +36,6 @@ import { selectDirectory } from '@/utils/bridge';
 import { nextThemeMode } from '@/utils/ambientLight';
 import UserAvatar from '@/components/UserAvatar';
 import MenuItem from '@/components/MenuItem';
-import Quota from '@/components/Quota';
 import Menu from '@/components/Menu';
 import { type AppLockDialogMode, useAppLockStore } from '@/store/appLockStore';
 
@@ -52,7 +49,6 @@ const SettingsMenu: React.FC<SettingsMenuProps> = ({ onPullLibrary, setIsDropdow
   const router = useAppRouter();
   const { envConfig, appService } = useEnv();
   const { user } = useAuth();
-  const { quotas } = useQuotaStats(true);
   const { themeMode, setThemeMode } = useThemeStore();
   const { settings, setSettingsDialogOpen } = useSettingsStore();
   const [isAlwaysOnTop, setIsAlwaysOnTop] = useState(settings.alwaysOnTop);
@@ -265,7 +261,6 @@ const SettingsMenu: React.FC<SettingsMenuProps> = ({ onPullLibrary, setIsDropdow
   // The sync row reports the health of whatever the user selected. Native
   // cursors freeze while Readest Cloud is off (the book/progress/note channels
   // are gated), so the file engine's timestamps have to stand in.
-  const readestEnabled = isReadestCloudEnabled(settings);
   // Shared with the reader's View menu (#5910) so both surfaces answer "is my
   // sync healthy?" identically. The hook gates the native cursors on whether
   // Readest Cloud is actually enabled and drops backends that cannot run right
@@ -334,17 +329,6 @@ const SettingsMenu: React.FC<SettingsMenuProps> = ({ onPullLibrary, setIsDropdow
                       })
               }
             />
-            {readestEnabled ? (
-              <button
-                onClick={handleUserProfile}
-                className='hover:bg-base-300 w-full rounded-md'
-                style={{
-                  paddingInlineStart: `${iconSize}px`,
-                }}
-              >
-                <Quota quotas={quotas} labelClassName='h-10 pl-3 pr-2' />
-              </button>
-            ) : null}
             <MenuItem label={_('Account')} onClick={handleUserProfile} />
           </ul>
         </MenuItem>

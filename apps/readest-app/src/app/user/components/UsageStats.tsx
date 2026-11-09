@@ -1,20 +1,17 @@
-import Quota from '@/components/Quota';
-import { QuotaType } from '@/types/quota';
-
+/**
+ * Self-hosted stub — see deploy/docs/patch-ledger.md (P10).
+ *
+ * Upstream's cloud-storage and daily-translation consumption meters on `/user`.
+ * With fixed quotas raised to imperceptible ceilings, these meters only surface
+ * artificial quota anxiety.
+ *
+ * The prop is `unknown` on purpose so `app/user/page.tsx` can keep passing
+ * `quotas` without this stub re-declaring `QuotaType`.
+ */
 interface UsageStatsProps {
-  quotas: QuotaType[];
+  quotas?: unknown;
 }
 
-const UsageStats: React.FC<UsageStatsProps> = ({ quotas }) => (
-  <div className='rounded-lg'>
-    <div className='p-0'>
-      {quotas && quotas.length > 0 ? (
-        <Quota quotas={quotas} showProgress className='space-y-4' labelClassName='pl-4 pr-2' />
-      ) : (
-        <div className='h-10 animate-pulse'></div>
-      )}
-    </div>
-  </div>
-);
+const UsageStats: React.FC<UsageStatsProps> = () => null;
 
 export default UsageStats;

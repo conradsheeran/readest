@@ -324,6 +324,39 @@ flipping their master switches, which is P1.
 
 ---
 
+### P10 — Remove the consumption meters
+
+- **Target**: `apps/readest-app/src/app/user/components/UsageStats.tsx` and
+  `apps/readest-app/src/app/library/components/SettingsMenu.tsx`
+- **Change**: reduce `UsageStats` to a component that returns `null`, keeping a
+  `quotas?: unknown` prop so the untouched `app/user/page.tsx` call site still
+  compiles when upstream changes `QuotaType`. In `SettingsMenu`, remove the
+  logged-in submenu's quota button, then the `Quota` import, the
+  `useQuotaStats` import, and its `const { quotas } = useQuotaStats(true);`
+  binding. Because that button was the only reader of the local
+  `readestEnabled`, also delete `readestEnabled` and its `isReadestCloudEnabled`
+  import — `useCloudSyncStatus` computes its own copy for the sync row, so the
+  "Synced {{time}}" indicator is unaffected. `Quota.tsx` itself is untouched.
+- **Effect**: removes the "Cloud Sync Storage" and "Translation Characters"
+  meters, with their progress bars and reset countdowns, from `/user` and the
+  library settings dropdown. With the self-hosted quotas fixed at imperceptible
+  ceilings, the meters only surface artificial quota anxiety.
+- **Why not configuration**: no flag guards either render, and raising the
+  quota values (P5) changes what the meters display without removing them.
+- **Tests**: `src/__tests__/app/user/plans-comparison.test.tsx` (the profile-page
+  billing-stub suite) asserts `UsageStats` renders nothing with the v0.12.20
+  quota props.
+- **Conflict risk**: **high.** `SettingsMenu.tsx` is now touched by both P4 and
+  P10, and it is an actively developed UI file. Re-apply by intent rather than
+  by patch text: find the quota row, delete it, then delete whatever that
+  leaves unused. `UsageStats.tsx` is a small, stable file.
+- **When it breaks**: a rebase conflict, or an unused-import lint error if
+  upstream restructures the submenu. Keep P4's upgrade-item removal and P10's
+  quota-row removal separate when resolving.
+- **Status**: applied
+
+---
+
 ## Part 3 — Resolved decisions
 
 Recorded so they are not relitigated. Each was an open question during the design
