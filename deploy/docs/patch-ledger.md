@@ -469,6 +469,42 @@ flipping their master switches, which is P1.
 
 ---
 
+### P14 — Remove the Offline Audio premium badge and sign-in gate
+
+- **Target**: `apps/readest-app/src/app/reader/components/tts/TTSPlayerSheet.tsx`
+- **Change**: set `premiumBadge` to `undefined` for every user, and reduce
+  `handleOpenDownloads` to `setView('chapters')` with no upgrade or sign-in
+  redirect. Drop the now-unused `isTTSCacheAllowed` and `useQuotaStats`
+  imports. `handleUpgrade` — and therefore the `user`, `router`, and
+  `navigateTo*` bindings — stays, because `VoiceList` still routes a voice the
+  reader's plan lacks through it.
+- **Effect**: the **Offline Audio** row in the reader's Read Aloud sheet is
+  unbadged for signed-in `free` and signed-out users alike, shows
+  "{{done}} of {{total}} downloaded", and opens the per-chapter download view
+  directly. The audio cache is local, so there was nothing to sign in for.
+- **Why not configuration**: the badge and redirect are unconditional JSX and
+  handler logic; no flag feeds them.
+- **Tests**: `src/__tests__/components/tts/TTSPlayerSheet.test.tsx` rewrites the
+  `free`-user and signed-out cases to assert no `Premium` badge, download
+  progress, and the `chapters-view`, with no router navigation. The
+  premium-user case already asserted that behavior.
+- **Note**: in `v0.12.20`, upstream refactored `IntegrationsPanel.tsx` to use
+  `shouldShowCloudProviderBadge`, which already hides the badge for signed-out
+  users when `isPremium` is `true` (via P1), so only `TTSPlayerSheet.tsx` needed
+  source changes in `v0.12.20`. In `TTSPlayerSheet.tsx`, the `!user || ...`
+  disjunct in `premiumBadge` and the `else` branch in `handleOpenDownloads`
+  bypassed P1's master switch for signed-out users; P14 removes both. This is
+  the lesson: a master switch is necessary but not sufficient, and a future
+  gate wearing the `!user || ...` pattern needs the same second look.
+- **Conflict risk**: **low.** One binding and one handler in one file.
+- **When it breaks**: a rebase conflict in `TTSPlayerSheet.tsx`, or an
+  unused-import lint error if upstream removes `handleUpgrade`/`VoiceList`.
+  Re-apply by intent: badge `undefined`, downloads open unconditionally, then
+  remove whatever that leaves unused.
+- **Status**: applied
+
+---
+
 ## Part 3 — Resolved decisions
 
 Recorded so they are not relitigated. Each was an open question during the design

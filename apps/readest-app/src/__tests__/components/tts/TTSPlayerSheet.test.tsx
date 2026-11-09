@@ -671,28 +671,41 @@ describe('TTSPlayerSheet', () => {
     expect(routerPush).not.toHaveBeenCalled();
   });
 
-  test('offline audio row: a free user sees a Premium badge and is routed to upgrade', () => {
+  // Offline audio is cached locally, so it is open to everyone: P1 removed the
+  // plan gate and P14 removed the independent `!user` disjunct that still
+  // badged a signed-out user and routed them to sign-in (see
+  // deploy/docs/patch-ledger.md P1 and P14). Both cohorts see download progress
+  // and open the chapters view directly.
+  const twoChapters = [
+    { key: 'c1', label: 'One', depth: 0, startSection: 0, endSection: 1 },
+    { key: 'c2', label: 'Two', depth: 0, startSection: 1, endSection: 2 },
+  ];
+
+  test('offline audio row: a free user sees no badge and opens the chapters view', () => {
     mockQuota.userProfilePlan = 'free';
-    const props = makeProps({ downloads: makeDownloads() });
+    const props = makeProps({
+      downloads: makeDownloads({ chapters: twoChapters, statusOf: () => 'none' }),
+    });
     render(<TTSPlayerSheet {...props} />);
-    expect(screen.getByText('Premium')).toBeTruthy();
-    expect(screen.getByText('Download chapters for offline playback')).toBeTruthy();
+    expect(screen.queryByText('Premium')).toBeNull();
+    expect(screen.getByText('0 of 2 downloaded')).toBeTruthy();
     fireEvent.click(screen.getByLabelText('Offline Audio'));
-    expect(routerPush).toHaveBeenCalledWith(expect.stringMatching(/^\/user\?redirect=/));
-    expect(props.onClose).toHaveBeenCalled();
-    // The premium chapters view must not open for a free user.
-    expect(screen.queryByText('chapters-view')).toBeNull();
+    expect(screen.getByText('chapters-view')).toBeTruthy();
+    expect(routerPush).not.toHaveBeenCalled();
   });
 
-  test('offline audio row: a signed-out user is routed to sign-in', () => {
+  test('offline audio row: a signed-out user sees no badge and opens the chapters view', () => {
     mockAuth.user = null;
     mockQuota.userProfilePlan = undefined;
-    const props = makeProps({ downloads: makeDownloads() });
+    const props = makeProps({
+      downloads: makeDownloads({ chapters: twoChapters, statusOf: () => 'none' }),
+    });
     render(<TTSPlayerSheet {...props} />);
-    expect(screen.getByText('Premium')).toBeTruthy();
+    expect(screen.queryByText('Premium')).toBeNull();
+    expect(screen.getByText('0 of 2 downloaded')).toBeTruthy();
     fireEvent.click(screen.getByLabelText('Offline Audio'));
-    expect(routerPush).toHaveBeenCalledWith(expect.stringContaining('/auth?redirect='));
-    expect(screen.queryByText('chapters-view')).toBeNull();
+    expect(screen.getByText('chapters-view')).toBeTruthy();
+    expect(routerPush).not.toHaveBeenCalled();
   });
 
   // Books with recorded narration (EPUB 3 Media Overlays) surface the narrator

@@ -32,8 +32,6 @@ import { useBookDataStore } from '@/store/bookDataStore';
 import { useSettingsStore } from '@/store/settingsStore';
 import { TranslationFunc, useTranslation } from '@/hooks/useTranslation';
 import { useResponsiveSize } from '@/hooks/useResponsiveSize';
-import { useQuotaStats } from '@/hooks/useQuotaStats';
-import { isTTSCacheAllowed } from '@/utils/access';
 import { navigateToLogin, navigateToProfile } from '@/utils/nav';
 import { formatPlaybackTime } from '@/utils/time';
 import { useVoicePreview } from '@/hooks/useVoicePreview';
@@ -175,17 +173,10 @@ const TTSPlayerSheet = ({
   const progress = useBookProgress(bookKey);
   const viewSettings = getViewSettings(bookKey);
 
-  // Offline audio (pre-downloading Read Aloud audio per chapter) is a premium
-  // feature: any paid plan can use it; free / signed-out users see the row with
-  // a Premium badge that routes to the upgrade page instead of the per-chapter
-  // download controls. Mirrors the cloud-sync paywall in IntegrationsPanel.
-  const { userProfilePlan, customizationPurchased } = useQuotaStats();
-  const isDownloadPremium = isTTSCacheAllowed(userProfilePlan ?? 'free', customizationPurchased);
-  // Only badge users who can't use it yet: signed out (known at once), or a
-  // resolved plan without the feature. Suppress it while a signed-in user's
-  // plan is still loading so it never flashes at an entitled user.
-  const premiumBadge =
-    !user || (userProfilePlan !== undefined && !isDownloadPremium) ? _('Premium') : undefined;
+  // Offline audio is a local cache, open to every user. P14 removed the badge
+  // and the signed-out gate that P1's master switch could not reach; see
+  // deploy/docs/patch-ledger.md P14.
+  const premiumBadge = undefined;
 
   // A book can carry a coverImageUrl that no longer resolves (cover never
   // extracted, file pruned). A broken <img> still occupies its h-32 box, so
@@ -354,9 +345,8 @@ const TTSPlayerSheet = ({
     setView('main');
   };
 
-  // Entitled users drill into the per-chapter download view; everyone else is
-  // routed to the upgrade page (or sign-in), the sheet closing first so the
-  // navigation isn't hidden behind it.
+  // A voice the reader's plan lacks leads to the upgrade page (or sign-in), the
+  // sheet closing first so the navigation isn't hidden behind it.
   // Signed in, to the plans on the user page; signed out, to sign in first.
   const handleUpgrade = () => {
     onClose();
@@ -365,8 +355,7 @@ const TTSPlayerSheet = ({
   };
 
   const handleOpenDownloads = () => {
-    if (isDownloadPremium) setView('chapters');
-    else handleUpgrade();
+    setView('chapters');
   };
 
   const timeoutOptions = getTTSTimeoutOptions(_);
