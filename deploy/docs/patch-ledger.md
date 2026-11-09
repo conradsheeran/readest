@@ -357,6 +357,37 @@ flipping their master switches, which is P1.
 
 ---
 
+### P11 — Remove the plan name from the profile page and account deletion modal
+
+- **Target**: `apps/readest-app/src/app/user/components/UserInfo.tsx` and
+  `apps/readest-app/src/app/user/components/AccountActions.tsx`
+- **Change**: delete the plan name pill from `UserInfo` — the
+  `<div className='mt-3'>` block that rendered `planDetails.color` and the
+  translated `planDetails.name` — then drop the `useTranslation` import and its
+  binding, which that block was the only reader of. Keep `planDetails` in the
+  props interface, accepted and ignored, because `app/user/page.tsx` still
+  computes and passes it. In the account deletion dialog, render the `planName`
+  line only when `userPlan !== 'free'`, matching the adjacent paid-benefits
+  warning.
+- **Effect**: a self-hosted user — always on the `free` plan — sees no plan
+  name on `/user` or in the account deletion modal. Non-free plans still show
+  their name in the deletion dialog, so upstream behavior is preserved where it
+  applies.
+- **Why not configuration**: both are unconditional JSX with no flag guarding
+  them.
+- **Tests**: `src/__tests__/app/user/account-actions.test.tsx` asserts that
+  `UserInfo` renders the display name and email and omits `Free Plan`, and that
+  the deletion dialog omits the plan name for `free` accounts and still names a
+  `plus` plan.
+- **Conflict risk**: **low.** `UserInfo.tsx` is small and stable; the
+  `AccountActions.tsx` change is one conditional around a single line.
+- **When it breaks**: a rebase conflict, or an unused-import lint error after
+  `useTranslation` leaves `UserInfo`. Re-apply by intent: remove the pill, then
+  remove whatever it leaves unused.
+- **Status**: applied
+
+---
+
 ## Part 3 — Resolved decisions
 
 Recorded so they are not relitigated. Each was an open question during the design
@@ -391,9 +422,10 @@ official account; fetching a static asset violates none of those. Mirroring the
 packs onto our own domain remains possible later if full offline operation
 becomes a requirement.
 
-### O4 — Residual plan wording → **deferred until after the first build**
+### O4 — Residual plan wording → **resolved by P11**
 
-`UserInfo` renders a plan name on the profile page, and every user here is
-`free`. Deciding now would be guesswork: P2 and P3 substantially rework that
-page, so look at what actually remains once they are applied rather than
-patching speculatively.
+`UserInfo` no longer renders a plan name on the profile page, and the account
+deletion dialog hides the plan name for `free` accounts. The remaining residual
+plan wording is covered by the second paywall pass in
+`deploy/docs/paywall-residue-spec.md` (P10–P16): consumption meters, tier
+badges, upgrade prompts, and benefit counts.

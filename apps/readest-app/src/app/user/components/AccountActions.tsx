@@ -185,7 +185,7 @@ const AccountActions: React.FC<AccountActionsProps> = ({
               <p className='break-words font-semibold' dir='auto'>
                 {userEmail}
               </p>
-              <p>{planName}</p>
+              {userPlan !== 'free' && <p>{planName}</p>}
               {(userPlan !== 'free' || customizationPurchased) && (
                 <p className='font-semibold'>{_('This account has a paid plan or purchases.')}</p>
               )}

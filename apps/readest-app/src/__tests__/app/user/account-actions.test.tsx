@@ -1,6 +1,8 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import AccountActions from '@/app/user/components/AccountActions';
+import UserInfo from '@/app/user/components/UserInfo';
+import { getPlanDetails } from '@/app/user/utils/plan';
 import type { UserPlan } from '@/types/quota';
 
 vi.mock('@/context/EnvContext', () => ({
@@ -13,13 +15,17 @@ vi.mock('@/hooks/useTranslation', () => ({
       params ? key.replace(/\{\{(\w+)\}\}/g, (_match, name) => String(params[name] ?? '')) : key,
 }));
 
-const renderActions = (userPlan: UserPlan = 'free', customizationPurchased = false) => {
+const renderActions = (
+  userPlan: UserPlan = 'free',
+  customizationPurchased = false,
+  planName = `${userPlan} plan`,
+) => {
   const onConfirmDelete = vi.fn();
   const onConfirmDeleteAllBooks = vi.fn();
   render(
     <AccountActions
       userEmail='reader@example.test'
-      planName={`${userPlan} plan`}
+      planName={planName}
       userPlan={userPlan}
       customizationPurchased={customizationPurchased}
       iapAvailable={false}
@@ -50,6 +56,17 @@ describe('account deletion confirmation (#7251)', () => {
     expect(dialog.textContent).toContain('reader@example.test');
     expect(dialog.textContent).toContain('plus plan');
     expect(dialog.textContent).toContain('All your data in the cloud will be permanently deleted.');
+  });
+
+  // P11 (deploy/docs/patch-ledger.md): a self-hosted account is always `free`,
+  // so the deletion dialog must not name a plan it will never leave.
+  it('does not name the plan for a free account inside the confirmation', () => {
+    renderActions('free', false, 'Free Plan');
+    openAccountDeletion();
+
+    const dialog = screen.getByText('Delete Your Account?').parentElement!;
+    expect(dialog.textContent).toContain('reader@example.test');
+    expect(dialog.textContent).not.toContain('Free Plan');
   });
 
   it.each<UserPlan>([
@@ -159,5 +176,32 @@ describe('account deletion confirmation (#7251)', () => {
     expect(onConfirmDeleteAllBooks).toHaveBeenCalledTimes(1);
     expect(onConfirmDelete).not.toHaveBeenCalled();
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  });
+});
+
+// P11 (deploy/docs/patch-ledger.md): the profile header shows the avatar,
+// display name, and email only. The plan name pill was removed; `planDetails`
+// stays in the props interface so `app/user/page.tsx` needs no edit.
+describe('UserInfo', () => {
+  const renderInfo = () =>
+    render(
+      <UserInfo
+        userFullName='Ada Reader'
+        userEmail='ada@example.test'
+        planDetails={getPlanDetails('free', [])!}
+      />,
+    );
+
+  it('renders the display name and email', () => {
+    renderInfo();
+
+    expect(screen.getByText('Ada Reader')).toBeTruthy();
+    expect(screen.getByText('ada@example.test')).toBeTruthy();
+  });
+
+  it('does not render the plan name', () => {
+    renderInfo();
+
+    expect(screen.queryByText('Free Plan')).toBeNull();
   });
 });
