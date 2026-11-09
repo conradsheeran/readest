@@ -434,6 +434,41 @@ flipping their master switches, which is P1.
 
 ---
 
+### P13 — Hide the Send-to-Readest email row
+
+- **Target**: `apps/readest-app/src/components/settings/IntegrationsPanel.tsx`
+- **Change**: delete the `<IntegrationRow>` titled `_('Send to Readest')` — status
+  `_('Email books to your library')`, `onClick={() => setSubPage('send')}` — from
+  the Content Sources card, and drop the now-unused `RiSendPlaneLine` import.
+  Leave the unreachable `if (subPage === 'send')` branch, the `'send'` member of
+  the `SubPage` union, and `SendToReadestForm.tsx` in place; the union member is
+  load-bearing for the deep-link `useEffect`'s type narrowing.
+- **Effect**: Settings → Integrations no longer offers the only navigation into
+  the personal-email-in card, whose "View plans" button routes to `/user` and
+  whose form cannot work without inbound email for `readest.com`. OPDS Catalogs
+  and Audiobookshelf remain. The other Send channels — the in-app `/send` page,
+  the mobile share sheet, and the browser extension — are unaffected.
+  `premiumBadge` in this file is deliberately untouched: P1 makes
+  `isCloudSyncPremium` permanently `true`, so `shouldShowCloudProviderBadge`
+  already returns `false` for every user.
+- **Why not open the gate**: `EMAIL_IN_PLANS` has no master switch, so P1 never
+  reached it. Opening it would replace a paywall card with a form that silently
+  fails, because personal-address email-in depends on inbound email for
+  `readest.com` and a Cloudflare Worker that do not exist here — see
+  `deploy/docs/known-limitations.md`.
+- **Why not configuration**: the row is unconditional JSX with no flag guarding
+  it.
+- **Tests**: `src/__tests__/components/settings/IntegrationsPanel-bookdrop.test.tsx`
+  asserts `Send to Readest` is not rendered while `OPDS Catalogs` still is.
+  `send-address-plan-gate.test.ts` and `SendToReadestForm.tsx` are untouched.
+- **Conflict risk**: **low.** One JSX block and one import line in a stable file.
+- **When it breaks**: a rebase conflict, or an unused-import lint error after the
+  row leaves. Re-apply by intent: remove the row, then remove whatever it leaves
+  unused.
+- **Status**: applied
+
+---
+
 ## Part 3 — Resolved decisions
 
 Recorded so they are not relitigated. Each was an open question during the design

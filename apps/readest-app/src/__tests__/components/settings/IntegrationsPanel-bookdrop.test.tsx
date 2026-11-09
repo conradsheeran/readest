@@ -96,6 +96,17 @@ describe('IntegrationsPanel Nearby BookDrop section', () => {
   });
 });
 
+// deploy/docs/patch-ledger.md P13: the "Send to Readest" row is the only route
+// into the personal-email-in paywall card, which depends on readest.com
+// infrastructure that does not exist in a self-hosted deployment.
+describe('IntegrationsPanel Content Sources rows (P13)', () => {
+  it('does not render the Send to Readest row', () => {
+    render(<IntegrationsPanel />);
+    expect(screen.queryByText('Send to Readest')).toBeNull();
+    expect(screen.getByText('OPDS Catalogs')).toBeTruthy();
+  });
+});
+
 describe('IntegrationsPanel Data Flow icon', () => {
   const heading = () => screen.getByRole('heading', { name: 'Integrations' }).parentElement!;
 

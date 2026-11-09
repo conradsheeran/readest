@@ -11,7 +11,6 @@ import {
   RiFileList3Line,
   RiMarkdownLine,
   RiDiscordLine,
-  RiSendPlaneLine,
   RiWifiLine,
   RiCloudLine,
   RiCloudFill,
@@ -929,12 +928,6 @@ const IntegrationsPanel: React.FC = () => {
               title={_('Audiobookshelf')}
               status={absStatus}
               onClick={() => setSubPage('audiobookshelf')}
-            />
-            <IntegrationRow
-              icon={RiSendPlaneLine}
-              title={_('Send to Readest')}
-              status={_('Email books to your library')}
-              onClick={() => setSubPage('send')}
             />
           </div>
         </div>
