@@ -540,6 +540,38 @@ flipping their master switches, which is P1.
 
 ---
 
+### P16 — Silence the translation quota upgrade toast
+
+- **Target**: `apps/readest-app/src/hooks/useTranslator.ts`
+- **Change**: in the `DAILY_QUOTA_EXCEEDED` branch of `useTranslator`'s
+  `catch`, drop the `eventDispatcher.dispatch('toast', …)` that said "Daily
+  translation quota reached. Upgrade your plan to continue using AI
+  translations." Keep `setSelectedProvider('azure')`, so the next call falls
+  back to the built-in provider. The `eventDispatcher` and `_` bindings stay:
+  the `UNAUTHORIZED` branch below still uses both.
+- **Effect**: the last runtime "Upgrade your plan" message on an active
+  self-hosted path disappears. (`useTTSControl.ts:412` still has a Readest Voice
+  daily-limit message, but it is unreachable without a voice catalog and is
+  prevented by `TTS_FIXED_QUOTA` when one is configured.) Translation still
+  degrades the same way when the daily quota is exhausted — automatically to
+  azure — but without a toast that offers a purchase this deployment cannot
+  sell.
+- **Why not configuration**: the toast is unconditional handler logic inside
+  the hook; no flag feeds it.
+- **Tests**: `src/__tests__/hooks/useTranslator.test.tsx` adds "falls back to
+  azure without an upgrade toast when the daily quota is exhausted", which
+  rejects from a custom translator with `ErrorCodes.DAILY_QUOTA_EXCEEDED`,
+  asserts the next call goes to azure, and asserts `eventDispatcher.dispatch`
+  is never called with `toast`.
+- **Conflict risk**: **low.** One branch of one `catch` block.
+- **When it breaks**: a rebase conflict in `useTranslator.ts`, or an
+  unused-import error if upstream removes the `UNAUTHORIZED` toast. Re-apply by
+  intent: delete the quota toast dispatch, keep the azure fallback, and remove
+  whatever the deletion leaves unused.
+- **Status**: applied
+
+---
+
 ## Part 3 — Resolved decisions
 
 Recorded so they are not relitigated. Each was an open question during the design

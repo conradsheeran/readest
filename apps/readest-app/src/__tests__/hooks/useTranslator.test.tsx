@@ -35,7 +35,9 @@ vi.mock('@/services/sync/replicaPublish', () => ({
 
 import { useTranslator } from '@/hooks/useTranslator';
 import { useCustomTranslatorStore } from '@/store/customTranslatorStore';
+import { eventDispatcher } from '@/utils/event';
 import {
+  ErrorCodes,
   getTranslatorDisplayLabel,
   getTranslators,
   isTranslatorAvailable,
@@ -144,5 +146,39 @@ describe('custom translators in the registry and useTranslator', () => {
       await waitFor(() => expect(result.current.translator).toBeDefined());
       expect(result.current.translator!.name.startsWith('custom:')).toBe(false);
     });
+  });
+
+  it('falls back to azure without an upgrade toast when the daily quota is exhausted', async () => {
+    generateTextMock.mockRejectedValue(new Error(ErrorCodes.DAILY_QUOTA_EXCEEDED));
+    const dispatchSpy = vi.spyOn(eventDispatcher, 'dispatch');
+    const azure = getTranslators().find((t) => t.name === 'azure')!;
+    const azureTranslate = vi.spyOn(azure, 'translate').mockResolvedValue(['Bonjour']);
+
+    try {
+      const { result } = renderHook(() =>
+        useTranslator({ provider: 'custom:llm', targetLang: 'fr' }),
+      );
+      await waitFor(() => expect(result.current.translator?.name).toBe('custom:llm'));
+
+      await act(async () => {
+        await expect(result.current.translate(['Hello'])).rejects.toThrow(
+          ErrorCodes.DAILY_QUOTA_EXCEEDED,
+        );
+      });
+
+      // The hook switched its selected provider to the built-in azure one, so
+      // the next call goes there instead of retrying the exhausted provider.
+      await act(async () => {
+        const out = await result.current.translate(['Hello again']);
+        expect(out).toEqual(['Bonjour']);
+      });
+      expect(azureTranslate).toHaveBeenCalledTimes(1);
+
+      // A self-hosted build has no plan to upgrade to; the toast must stay silent.
+      expect(dispatchSpy.mock.calls.some(([event]) => event === 'toast')).toBe(false);
+    } finally {
+      azureTranslate.mockRestore();
+      dispatchSpy.mockRestore();
+    }
   });
 });

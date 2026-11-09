@@ -169,13 +169,8 @@ export function useTranslator({
         return enablePolishing ? polish(results, targetLanguage) : results;
       } catch (err) {
         if (err instanceof Error && err.message.includes(ErrorCodes.DAILY_QUOTA_EXCEEDED)) {
-          eventDispatcher.dispatch('toast', {
-            timeout: 5000,
-            message: _(
-              'Daily translation quota reached. Upgrade your plan to continue using AI translations.',
-            ),
-            type: 'error',
-          });
+          // Fall back silently: a self-hosted build has no plan to upgrade to.
+          // See deploy/docs/patch-ledger.md (P16).
           setSelectedProvider('azure');
         }
         if (
