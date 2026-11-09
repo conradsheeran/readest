@@ -505,6 +505,41 @@ flipping their master switches, which is P1.
 
 ---
 
+### P15 — Make the fixed quotas reachable in Tauri builds
+
+- **Target**: `apps/readest-app/src/utils/access.ts`
+- **Change**: add `process.env['NEXT_PUBLIC_STORAGE_FIXED_QUOTA']` and
+  `process.env['NEXT_PUBLIC_TRANSLATION_FIXED_QUOTA']` to the fallback chains in
+  `getStoragePlanData()` and `getTranslationQuota()`, after the non-prefixed
+  forms. Both stay literal `process.env['NEXT_PUBLIC_…']` member expressions so
+  Next inlines them into the client bundle.
+- **Effect**: fixes Android storage and translation quotas. Without it, both
+  resolve to `0` and fall through to upstream's free-plan defaults — 500 MB
+  storage and 10 240 translation characters/day — whatever
+  `deploy/docs/android.md` bakes into the APK. Uploads then fail with
+  "云存储空间不足" and translation stops after a few pages.
+- **Why it is broken**: same defect class as **P8**. In a Tauri build there is
+  no server, so `getRuntimeConfig()` is `undefined`, and the fallback reads
+  `STORAGE_FIXED_QUOTA` / `TRANSLATION_FIXED_QUOTA`, which have no
+  `NEXT_PUBLIC_` prefix and so are never inlined into the client bundle.
+  `getServerRuntimeConfig()` in `services/runtimeConfig.ts` already reads the
+  `NEXT_PUBLIC_` forms, but it only ever runs on the server and does not help the
+  APK.
+- **Why not configuration**: the APK already bakes both variables; nothing on the
+  client path reads them. The patch is what makes the configuration take effect.
+- **Tests**: `src/__tests__/utils/customization-access.test.ts` asserts that,
+  with `getRuntimeConfig()` undefined and the non-prefixed variables absent, the
+  `NEXT_PUBLIC_` forms override the `free` plan defaults for both quotas, and
+  that the injected runtime config still wins on the web.
+- **Conflict risk**: **low.** Two expressions in a small, stable file, same as
+  P8.
+- **When it breaks**: a rebase conflict in `getStoragePlanData` /
+  `getTranslationQuota`. Re-apply by intent: extend each `??` chain with the
+  `NEXT_PUBLIC_` form as a literal member expression, before the `'0'` default.
+- **Status**: applied
+
+---
+
 ## Part 3 — Resolved decisions
 
 Recorded so they are not relitigated. Each was an open question during the design

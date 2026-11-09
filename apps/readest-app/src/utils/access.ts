@@ -227,8 +227,14 @@ export const getStoragePlanData = (token: string) => {
   const usage = data['storage_usage_bytes'] || 0;
   const purchasedQuota = data['storage_purchased_bytes'] || 0;
   const runtimeConfig = getRuntimeConfig();
+  // Tauri has no server (/runtime-config.js is absent) and Next only inlines
+  // literal NEXT_PUBLIC_* member expressions into the client bundle. See
+  // deploy/docs/patch-ledger.md (P15).
   const fixedQuota =
-    runtimeConfig?.storageFixedQuota ?? parseInt(process.env['STORAGE_FIXED_QUOTA'] ?? '0');
+    runtimeConfig?.storageFixedQuota ??
+    parseInt(
+      process.env['STORAGE_FIXED_QUOTA'] ?? process.env['NEXT_PUBLIC_STORAGE_FIXED_QUOTA'] ?? '0',
+    );
   const planQuota = fixedQuota || DEFAULT_STORAGE_QUOTA[plan] || DEFAULT_STORAGE_QUOTA['free'];
   const quota = planQuota + purchasedQuota;
 
@@ -241,8 +247,16 @@ export const getStoragePlanData = (token: string) => {
 
 export const getTranslationQuota = (plan: UserPlan): number => {
   const runtimeConfig = getRuntimeConfig();
+  // Tauri has no server (/runtime-config.js is absent) and Next only inlines
+  // literal NEXT_PUBLIC_* member expressions into the client bundle. See
+  // deploy/docs/patch-ledger.md (P15).
   const fixedQuota =
-    runtimeConfig?.translationFixedQuota ?? parseInt(process.env['TRANSLATION_FIXED_QUOTA'] ?? '0');
+    runtimeConfig?.translationFixedQuota ??
+    parseInt(
+      process.env['TRANSLATION_FIXED_QUOTA'] ??
+        process.env['NEXT_PUBLIC_TRANSLATION_FIXED_QUOTA'] ??
+        '0',
+    );
   return (
     fixedQuota || DEFAULT_DAILY_TRANSLATION_QUOTA[plan] || DEFAULT_DAILY_TRANSLATION_QUOTA['free']
   );

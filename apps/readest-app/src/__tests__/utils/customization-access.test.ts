@@ -2,11 +2,14 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { jwtDecode } from 'jwt-decode';
 import {
   getCustomizationPurchased,
+  getStoragePlanData,
+  getTranslationQuota,
   isAnkiAllowed,
   isCustomizationAllowed,
   isCustomTranslatorAllowed,
   isSelfHosted,
 } from '@/utils/access';
+import { DEFAULT_DAILY_TRANSLATION_QUOTA, DEFAULT_STORAGE_QUOTA } from '@/services/constants';
 import { getServerRuntimeConfig } from '@/services/runtimeConfig';
 
 vi.mock('jwt-decode', () => ({ jwtDecode: vi.fn() }));
@@ -191,5 +194,45 @@ describe('isAnkiAllowed', () => {
     expect(isAnkiAllowed('pro', false)).toBe(true);
     expect(isAnkiAllowed('free', true)).toBe(true);
     expect(isAnkiAllowed('purchase', false)).toBe(true);
+  });
+});
+
+// In a Tauri/Android build there is no server, so `getRuntimeConfig()` is
+// `undefined`, and the non-prefixed env vars are never inlined into the client
+// bundle. Only the literal `NEXT_PUBLIC_*` member expressions reach the APK.
+// See deploy/docs/patch-ledger.md (P15) and deploy/docs/android.md.
+describe('fixed quotas in Tauri builds (P15)', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    delete window.__READEST_RUNTIME_CONFIG;
+  });
+
+  it('uses NEXT_PUBLIC_STORAGE_FIXED_QUOTA when there is no runtime config', () => {
+    delete window.__READEST_RUNTIME_CONFIG;
+    vi.stubEnv('STORAGE_FIXED_QUOTA', undefined);
+    vi.stubEnv('NEXT_PUBLIC_STORAGE_FIXED_QUOTA', '250000000');
+
+    const { quota } = getStoragePlanData(mockToken({ plan: 'free' }));
+
+    expect(quota).toBe(250000000);
+    expect(quota).not.toBe(DEFAULT_STORAGE_QUOTA.free);
+  });
+
+  it('uses NEXT_PUBLIC_TRANSLATION_FIXED_QUOTA when there is no runtime config', () => {
+    delete window.__READEST_RUNTIME_CONFIG;
+    vi.stubEnv('TRANSLATION_FIXED_QUOTA', undefined);
+    vi.stubEnv('NEXT_PUBLIC_TRANSLATION_FIXED_QUOTA', '4242');
+
+    expect(getTranslationQuota('free')).toBe(4242);
+    expect(getTranslationQuota('free')).not.toBe(DEFAULT_DAILY_TRANSLATION_QUOTA.free);
+  });
+
+  it('still lets the injected runtime config win on the web', () => {
+    vi.stubEnv('NEXT_PUBLIC_STORAGE_FIXED_QUOTA', '250000000');
+    vi.stubEnv('NEXT_PUBLIC_TRANSLATION_FIXED_QUOTA', '4242');
+    window.__READEST_RUNTIME_CONFIG = { storageFixedQuota: 123, translationFixedQuota: 456 };
+
+    expect(getStoragePlanData(mockToken({ plan: 'free' })).quota).toBe(123);
+    expect(getTranslationQuota('free')).toBe(456);
   });
 });
