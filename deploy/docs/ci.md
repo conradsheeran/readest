@@ -1,18 +1,21 @@
 # CI
 
-Two workflows, both in `.github/workflows/`, both prefixed `selfhost-` because
-that directory is the one place namespacing is impossible.
-
-**Status: specification.** Neither workflow exists yet. Upstream's nine workflows
-are deleted on `main` (patch ledger P7) — including the ones that would otherwise
-fire on `release: published` and burn hours of runner time failing.
+Two workflows, both live in `.github/workflows/`, both prefixed `selfhost-`
+because that directory is the one place namespacing is impossible. Upstream's
+thirteen workflows are deleted on `main` (patch ledger P7) — including the ones
+that would otherwise fire on `release: published` and burn hours of runner time
+failing.
 
 ## `selfhost-image.yml` — the Docker image
 
 **Triggers**: `workflow_dispatch`, `push` to `main`, `release: published`.
 
-**Does**: builds `production-stage` from the root `Dockerfile` for
-`linux/amd64` and pushes to GHCR.
+**Does**: builds `production-stage` from the root `Dockerfile` for `linux/amd64`.
+A `push` to `main` builds only — no image is published, because the build step's
+`push: ${{ github.event_name == 'release' }}` evaluates false. That run is still
+useful: it executes `next build` (and therefore the type-check gate below). A
+`release: published` builds and pushes to GHCR, authenticating as
+`secrets.GHCR_PAT`, falling back to `secrets.GITHUB_TOKEN`.
 
 **Build arguments**: only `NEXT_PUBLIC_APP_PLATFORM=web`. Everything else is
 runtime configuration, so one generic image serves any deployment
@@ -46,9 +49,25 @@ building it on every commit to `main` is waste.
 `.env.local`, `tauri android init`, reconstitute the keystore from secrets,
 build, attach the APKs to the release.
 
-**Secrets**: `ANDROID_KEY_BASE64`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`.
-The keystore is written to `$RUNNER_TEMP`, never into the workspace — the
-repository is public.
+**Signing secrets**: `ANDROID_KEY_BASE64`, `ANDROID_KEY_ALIAS`,
+`ANDROID_KEY_PASSWORD`. The keystore is written to `$RUNNER_TEMP`, never into
+the workspace — the repository is public.
+
+**Baked server secrets**: `NEXT_PUBLIC_SUPABASE_URL`,
+`NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_API_BASE_URL`,
+`NEXT_PUBLIC_NODE_BASE_URL`, `NEXT_PUBLIC_FONT_BASE_URL`. The workflow writes
+them into `apps/readest-app/.env.local` before `next build`, so each is fixed
+into the APK (`android.md`).
+
+**Optional repository variables** (`vars.*`): `STORAGE_FIXED_QUOTA` (default
+`107374182400`) and `TRANSLATION_FIXED_QUOTA` (default `10000000`). Both are
+written as `NEXT_PUBLIC_*` build inputs.
+
+**Built-in constants** written directly by the workflow:
+`NEXT_PUBLIC_APP_PLATFORM=tauri`, `NEXT_PUBLIC_SELF_HOSTED=true`,
+`NEXT_PUBLIC_DISABLE_UPDATER=true`, `NEXT_PUBLIC_OBJECT_STORAGE_TYPE=s3`. The
+updater flag makes `hasUpdater` false, so Settings → Control does not render the
+dead "Check Updates on Start" and "Nightly Builds" switches.
 
 **Artifacts**: `Readest_<version>_universal.apk` and
 `Readest_<version>_arm64.apk`, uploaded to the GitHub release.

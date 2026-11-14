@@ -3,12 +3,12 @@
 The authority on what this fork changes in upstream source, and why.
 
 **Each entry's `Status` field is the authority on whether that patch is applied.**
-Every entry below is a decision reached and verified against upstream `v0.12.1`.
+Every entry below is a decision reached and verified against upstream `v0.12.20`.
 Implementing an entry means writing the patch *and* moving its status to
 `applied` in the same commit, so that the ledger and `git diff upstream..main`
 never disagree.
 
-Verified against upstream `v0.12.1` (`f3e1df7`). Line numbers come from that tag
+Verified against upstream `v0.12.20` (`28aab23e0`). Line numbers come from that tag
 and are a starting point for a search, not an anchor — locate code by its
 surrounding text, never by line number.
 
@@ -23,8 +23,10 @@ here would buy permanent upgrade cost for nothing.
 | Goal | How it is actually done | Documented in |
 | --- | --- | --- |
 | S3-compatible object storage | `OBJECT_STORAGE_TYPE=s3` plus the `S3_*` variables on the client container. Upstream has supported arbitrary S3 endpoints since it introduced the `s3` storage type. | `deployment.md` |
-| Quotas decoupled from plans | `STORAGE_FIXED_QUOTA` / `TRANSLATION_FIXED_QUOTA`. `utils/access.ts` prefers the fixed value over the per-plan table. | `deployment.md` |
+| Premium features open with or without sign-in | `SELF_HOSTED=true` on the client container. Upstream documents it as unlocking every premium feature with or without a signed-in user; the client-side default when it is absent is P1. | `deployment.md` |
+| Quotas decoupled from plans | `STORAGE_FIXED_QUOTA` / `TRANSLATION_FIXED_QUOTA` / `TTS_FIXED_QUOTA`. `utils/access.ts` prefers the fixed value over the per-plan table. `getTTSQuota()` is server-only, so it has no `NEXT_PUBLIC_` form; in Tauri builds the `NEXT_PUBLIC_` forms of the first two are read through P15. | `deployment.md`, `android.md` |
 | No Sentry crash reporting | Do not set `SENTRY_DSN`. `src-tauri/src/sentry_config.rs::dsn_from_env` maps unset or empty to `None`, and `scripts/upload-sourcemaps.mjs` no-ops without `SENTRY_AUTH_TOKEN`. Upstream built this for fork builds. | `android.md` |
+| Updater toggles hidden in Tauri/Android settings | `NEXT_PUBLIC_DISABLE_UPDATER=true` baked into `.env.local`. `services/nativeAppService.ts::hasUpdater` evaluates to `false`, which hides the Settings → Control "Update" section without a patch. | `android.md`, `ci.md` |
 | Signup restricted to an allowlist | GoTrue `before_user_created` hook backed by a database function. Confirmed present in `supabase/auth` v2.185.0 as `HookConfiguration.BeforeUserCreated`. | `deployment.md` |
 | Android app talks to our server | Baked configuration: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_API_BASE_URL`, `NEXT_PUBLIC_NODE_BASE_URL`. The Tauri build has no runtime injection, so these are the whole story. | `android.md` |
 | OPDS proxy served by us | On the web, the runtime config's `apiBaseUrl` is used through P5's `getNodeBaseUrl()` fallback chain; on Android, `NEXT_PUBLIC_NODE_BASE_URL` points at our origin. The route `apps/readest-app/src/app/api/opds/proxy/route.ts` ships in our image, so it answers. | `android.md`, `deployment.md` |

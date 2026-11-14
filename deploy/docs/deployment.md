@@ -72,9 +72,31 @@ need a patch, which no ledger entry currently covers.
 | --- | --- |
 | `STORAGE_FIXED_QUOTA` | Bytes. Overrides the per-plan table for every user |
 | `TRANSLATION_FIXED_QUOTA` | Characters per day, same |
+| `TTS_FIXED_QUOTA` | Readest Voice TTS characters per day, same. Only has an effect when a voice catalog is configured |
 
 These are how quotas are decoupled from paid plans. `utils/access.ts` prefers the
-fixed value, so all users get it regardless of their plan claim.
+fixed value, so all users get it regardless of their plan claim. The committed
+defaults are 100 GB of storage, 10,000,000 translation characters/day, and
+10,000,000 Readest Voice TTS characters/day when a voice catalog is configured.
+Without `TTS_FIXED_QUOTA`, `getTTSQuota()` falls back to the per-plan table,
+whose `free` entry is `0`, so a configured voice catalog would immediately
+answer `429 DAILY_QUOTA_EXCEEDED` for every self-hosted user.
+
+### Self-hosted unlock
+
+| Variable | Notes |
+| --- | --- |
+| `SELF_HOSTED` | `true`. Unlocks every premium feature with or without a signed-in user. Set `false` only for a hosted service that sells plans |
+| `READEST_TRUSTED_PRIVATE_HOSTS` | Exact, comma-separated hostnames/IPs the OPDS proxy may reach on private networks. Empty keeps the default block |
+
+The client-side `isSelfHosted()` default when neither `SELF_HOSTED` nor
+`NEXT_PUBLIC_SELF_HOSTED` is set is `true` (P1). The container value still
+matters because upstream treats it as the operator's switch; see P1 in the
+ledger. Setting `SELF_HOSTED=false` on the client container is the only way to
+turn the paywalls back on: the server-side API routes read the container
+environment directly, and `getServerRuntimeConfig()` injects the same value into
+the page through `/runtime-config.js`, so the web browser sees `false` via
+`window.__READEST_RUNTIME_CONFIG` as well.
 
 ### Signup
 

@@ -27,8 +27,9 @@ pull. Old release tags keep their commits reachable, so previous releases stay
 reproducible. `rerere` must be enabled per clone or the same conflicts are
 re-resolved by hand every time.
 
-Two follow-on decisions belong to this one. Upstream's nine workflows are
-**deleted** on `main` rather than disabled in the GitHub UI, because UI state is
+Two follow-on decisions belong to this one. Upstream's workflows (nine at
+`v0.12.1`, thirteen at `v0.12.20`; see ledger P7) are **deleted** on `main`
+rather than disabled in the GitHub UI, because UI state is
 invisible to an agent reading the repository and is silently bypassed when an
 upstream release adds a workflow — at the cost of a mechanical delete/modify
 conflict whenever upstream edits one. And schema migrations went back to

@@ -45,9 +45,12 @@ with our own releases.
 ## 3. Read what you are about to move
 
 ```bash
-git log --oneline upstream..main          # our patch commits, in order
-git diff --stat upstream..main            # every file we touch
+git log --oneline refs/heads/upstream..main   # our patch commits, in order
+git diff --stat refs/heads/upstream..main     # every file we touch
 ```
+
+Write `refs/heads/upstream`, not bare `upstream`: `upstream` is also the name of
+the remote, so Git warns that the refname is ambiguous.
 
 That list is the work. Compare it against the ledger; if they disagree, the
 ledger is stale and fixing it is part of this upgrade.
@@ -57,13 +60,28 @@ before the rebase tells you:
 
 ```bash
 git diff refs/upstream/<OLD_TAG>..refs/upstream/<NEW_TAG> -- \
+  apps/readest-app/.env \
   apps/readest-app/src/utils/access.ts \
+  apps/readest-app/src/utils/storage.ts \
+  apps/readest-app/src/services/environment.ts \
+  apps/readest-app/src/services/runtimeConfig.ts \
+  apps/readest-app/src/helpers/updater.ts \
   apps/readest-app/src/hooks/useAvailablePlans.ts \
-  apps/readest-app/src/app/user/components/PlansComparison.tsx \
-  apps/readest-app/src/app/library/components/SettingsMenu.tsx \
+  apps/readest-app/src/hooks/useTranslator.ts \
   apps/readest-app/src/pages/api/deepl/translate.ts \
-  apps/readest-app/.env
+  apps/readest-app/src/components/AboutWindow.tsx \
+  apps/readest-app/src/components/UpdaterWindow.tsx \
+  apps/readest-app/src/components/settings/IntegrationsPanel.tsx \
+  apps/readest-app/src/app/library/components/SettingsMenu.tsx \
+  apps/readest-app/src/app/reader/components/tts/TTSPlayerSheet.tsx \
+  apps/readest-app/src/app/user/components/AccountActions.tsx \
+  apps/readest-app/src/app/user/components/PlansComparison.tsx \
+  apps/readest-app/src/app/user/components/UsageStats.tsx \
+  apps/readest-app/src/app/user/components/UserInfo.tsx
 ```
+
+That is the source target of every patch P1–P16; the tests each patch touches are
+listed in the ledger and move with their patch.
 
 ## 4. Rebase
 
@@ -110,7 +128,9 @@ runbook — run all of them, every time.
 ### 5a. New plan gates
 
 Upstream adds paywalls as a `*_REQUIRES_PREMIUM` master switch paired with a
-`*_PLANS` list. P1 flips the two that existed at `v0.12.1`. Find any new ones:
+`*_PLANS` list. P1 flips the five that existed at `v0.12.20`, defaults
+`isSelfHosted()` to `true`, and unlocks `isTTSInPlan()` / `isVoiceTierInPlan()`.
+Find any new ones:
 
 ```bash
 grep -rn "REQUIRES_PREMIUM\|_PLANS *:" apps/readest-app/src/utils/access.ts
@@ -140,8 +160,9 @@ with it before releasing.
 git show refs/upstream/<NEW_TAG>:apps/readest-app/.env
 ```
 
-P5 blanks six values. If upstream has added a seventh obfuscated default, blank
-it too and extend the ledger entry.
+P5 blanks four values (PostHog and Stripe) and replaces the two Supabase
+defaults with placeholders. If upstream adds another obfuscated default,
+neutralize it too and extend the ledger entry.
 
 ### 5d. New upstream workflows
 
@@ -149,8 +170,8 @@ it too and extend the ledger entry.
 git ls-tree --name-only refs/upstream/<NEW_TAG>:.github/workflows
 ```
 
-P7 deletes nine files. Anything new here will run in the fork unless it is also
-deleted.
+P7 deletes thirteen files. Anything new here will run in the fork unless it is
+also deleted.
 
 ## 6. Prove it still compiles
 

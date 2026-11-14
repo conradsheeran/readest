@@ -68,6 +68,11 @@ it. They point at different commits, on purpose.
 `deploy/` is the only directory this fork adds. Upstream will not create a
 directory by that name, so nothing inside it can conflict during a rebase.
 
+The only files this fork owns outside `deploy/` are the root `AGENTS.md`, the
+local-data ignores in `.gitignore`, the `selfhost-*.yml` workflows in
+`.github/workflows/`, and the upstream source patches registered in the ledger
+(under `apps/`). Nothing else outside `deploy/` belongs to the fork.
+
 Do **not** put anything in the root `patches/` directory. Upstream already owns
 it — those are pnpm dependency patches, consumed by `COPY patches/ ./patches/`
 in the root `Dockerfile`. Writing there corrupts the build.

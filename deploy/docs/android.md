@@ -25,6 +25,9 @@ and these values coexist.
 
 ```env
 NEXT_PUBLIC_APP_PLATFORM=tauri
+NEXT_PUBLIC_SELF_HOSTED=true
+# Disables the updater UI: the APK has no update channel of its own.
+NEXT_PUBLIC_DISABLE_UPDATER=true
 
 # Which server this APK talks to. All four point at the same origin.
 NEXT_PUBLIC_SUPABASE_URL=https://read.conraaad.com
@@ -35,8 +38,10 @@ NEXT_PUBLIC_NODE_BASE_URL=https://read.conraaad.com
 # Required by patch P8 — without the patch this value is not read at all.
 NEXT_PUBLIC_OBJECT_STORAGE_TYPE=s3
 
-NEXT_PUBLIC_STORAGE_FIXED_QUOTA=<same as the server>
-NEXT_PUBLIC_TRANSLATION_FIXED_QUOTA=<same as the server>
+# Required by patch P15 — without the patch this value is not read at all.
+NEXT_PUBLIC_STORAGE_FIXED_QUOTA=107374182400
+# Required by patch P15 — without the patch this value is not read at all.
+NEXT_PUBLIC_TRANSLATION_FIXED_QUOTA=10000000
 NEXT_PUBLIC_FONT_BASE_URL=https://read.conraaad.com/fonts
 ```
 
@@ -44,10 +49,12 @@ Why each of the four server URLs is needed:
 
 | Variable | Consumed by | Without it |
 | --- | --- | --- |
-| `NEXT_PUBLIC_SUPABASE_URL` | `utils/supabase.ts` | Falls back to the baked official default, or — once P5 blanks it — fails the build |
+| `NEXT_PUBLIC_SUPABASE_URL` | `utils/supabase.ts` | Falls back to the baked official default. P5 replaces that default with `https://placeholder.invalid`, so leaving this unset bakes an unreachable placeholder rather than upstream's Supabase |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | `utils/supabase.ts` | Same |
 | `NEXT_PUBLIC_API_BASE_URL` | `services/environment.ts::getBaseUrl` | Falls back to `https://web.readest.com` |
 | `NEXT_PUBLIC_NODE_BASE_URL` | `services/environment.ts::getNodeBaseUrl` | Falls back to `https://node.readest.com`. Used for the OPDS proxy, which our image serves at `/api/opds/proxy` |
+| `NEXT_PUBLIC_SELF_HOSTED` | `utils/access.ts::isSelfHosted` | Falls back to P1's `true` default. Baked explicitly so a build environment that sets it to `false` cannot silently re-enable the paywalls |
+| `NEXT_PUBLIC_DISABLE_UPDATER` | `services/nativeAppService.ts::hasUpdater` | Without it, `hasUpdater` stays `true` on Android, so Settings → Control renders dead "Check Updates on Start" and "Nightly Builds" switches. Setting it to `true` disables them without a source patch |
 
 Deliberately **not** set:
 
@@ -94,7 +101,7 @@ git checkout .            # tauri android init rewrites tracked files; discard t
 `tauri android init` regenerates the Gradle project from scratch every build,
 which is why the keystore configuration below is written *after* it and not
 committed. The `git checkout .` afterwards is upstream's own step: `init` and
-`icon` modify tracked files, and those modifications are not wanted.
+`icon` modify tracked files, and those changes are not wanted.
 
 Then signing configuration and the build:
 
@@ -156,6 +163,11 @@ only if that reduction matters; otherwise the universal APK covers every device.
 ## Known gaps
 
 Anything under "Open decisions" in the patch ledger that touches the app affects
-the APK too. O1 in particular: until it is resolved, the in-app updater offers
-**official** Readest builds, so an APK shipped today can update itself into the
-stock app. Do not distribute widely before O1 is settled.
+the APK too. The in-app updater is the notable closed one: P9 makes the update
+check a no-op, and P12 retires the About dialog's update button and the startup
+release-notes fetch. `NEXT_PUBLIC_DISABLE_UPDATER=true` is baked into the APK as
+well, which sets `hasUpdater` to `false` and hides the Settings → Control
+"Check Updates on Start" and "Nightly Builds" toggles instead of leaving them to
+do nothing. An installed APK therefore does not offer **official** Readest
+builds and cannot update itself into the stock app. There is no in-app update
+path; ship and install a new APK.

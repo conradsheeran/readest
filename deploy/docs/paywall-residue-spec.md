@@ -1,11 +1,22 @@
 # Paywall residue — remediation spec
 
 Work order for the second pass at removing upstream's billing surfaces. Verified
-against the tree at `8eaedf2d` (upstream `v0.12.1` + patches P1–P9).
+against the tree at `8eaedf2d` (upstream `v0.12.1` + patches P1–P9), and applied
+on upstream `v0.12.20` (`28aab23e0`).
 
 Ledger entry **O4** deferred the residual plan wording "until after the first
 build". The build exists, so this spec resolves O4 and everything found next to
 it.
+
+## Status
+
+**Applied.** Every task below is in the tree on upstream `v0.12.20`:
+T1 realigns P1's tests; T2–T6 landed as ledger entries P10–P16; and T7's
+configuration change — raised quota ceilings (`STORAGE_FIXED_QUOTA`,
+`TRANSLATION_FIXED_QUOTA`, and `TTS_FIXED_QUOTA`), `SELF_HOSTED=true`,
+`NEXT_PUBLIC_DISABLE_UPDATER=true`, and `READEST_TRUSTED_PRIVATE_HOSTS` — is in
+`deploy/.env.example`, `deploy/compose.yaml`,
+`.github/workflows/selfhost-android.yml`, and `deploy/docs/android.md`.
 
 ## Goal
 

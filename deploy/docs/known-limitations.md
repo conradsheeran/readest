@@ -1,7 +1,7 @@
 # Known limitations
 
 Things that are broken or absent when self-hosting, verified against upstream
-`v0.12.1`. Each is either accepted, or tracked as an open decision in the patch
+`v0.12.20`. Each is either accepted, or tracked as an open decision in the patch
 ledger. This file exists so that the next person to hit one does not spend an
 afternoon rediscovering it.
 
@@ -20,15 +20,21 @@ Readest's CDN, which will never hold our object.
 Affects publishing a book cover — share links and the Discord Rich Presence
 cover. Tracked as ledger **O2**.
 
-### The in-app updater offers official builds
+### The in-app updater is disabled
 
-`helpers/updater.ts` and `components/UpdaterWindow.tsx` fetch
-`https://download.readest.com/releases/latest.json`. In our APK this presents
-**official** Readest releases as available updates, and taking one replaces the
-self-hosted app with the stock build.
+P9 makes `checkForAppUpdates` a no-op and removes its settings entry; P12 makes
+`checkAppReleaseNotes` a no-op and removes the About dialog's "Check Update"
+button. `components/UpdaterWindow.tsx` and `app/updater/page.tsx` remain in the
+source but are unreachable.
 
-Tracked as ledger **O1**, and it is the reason `android.md` says not to
-distribute the APK widely yet.
+Nothing in the app now fetches
+`https://download.readest.com/releases/latest.json` or
+`release-notes.json`, so an installed APK no longer offers **official** Readest
+releases as updates, cannot replace itself with the stock build, and no longer
+pops upstream's release notes after a version bump.
+
+Tracked as ledger **O1**, resolved by **P9** and completed by **P12**. There is
+no in-app update path; install a new APK to update.
 
 ### CJK webfonts need mirroring
 
@@ -71,8 +77,9 @@ rebuilding the APK. See ADR-0004.
 
 Deliberate (ADR-0002). Quotas come from `STORAGE_FIXED_QUOTA` and
 `TRANSLATION_FIXED_QUOTA` instead, and the premium feature gates are opened by
-ledger P1. A consequence is that `UserInfo` still renders a plan name on the
-profile page — cosmetic, tracked as ledger **O4**.
+ledger P1. Ledger **P11** removed the plan name from the profile page, and the
+account deletion dialog hides it for `free` accounts, so plan terminology no
+longer appears there.
 
 ### `main` is force-pushed on every upgrade
 
