@@ -42,8 +42,9 @@ android {
             dimension = "store"
         }
         // Handwriting (issue #3673): BOOX raw drawing needs the Onyx Pen SDK,
-        // which only BOOX's own Maven host serves. It is opt-in
-        // (-PpenFlavor=booxPen); see android/README-pen.md.
+        // which only BOOX's own Maven host serves. Selfhost builds enable
+        // booxPen by default, overridable via -PpenFlavor=genericPen; see
+        // android/README-pen.md.
         create("genericPen") {
             dimension = "pen"
         }
@@ -54,9 +55,10 @@ android {
     }
 }
 
-// Default builds never declare (or contact) the BOOX repository. The app
-// module declares it too, as consumers resolve with their own repositories.
-if (findProperty("penFlavor") == "booxPen") {
+// Declare the BOOX repository whenever penFlavor resolves to booxPen (the
+// selfhost default). The app module declares it too, as consumers resolve
+// with their own repositories.
+if ((findProperty("penFlavor")?.toString() ?: "booxPen") == "booxPen") {
     repositories {
         maven { url = uri("https://repo.boox.com/repository/maven-public/") }
     }

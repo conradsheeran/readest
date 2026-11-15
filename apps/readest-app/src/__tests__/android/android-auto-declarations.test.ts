@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import { resolve } from 'path';
 
 /**
@@ -308,5 +308,144 @@ describe('Android Auto declarations (#3919)', () => {
     );
     expect(validator).toContain('val TRUSTED_CERTIFICATES: Map<String, Set<String>> = emptyMap()');
     expect(validator).toContain('com.google.android.projection.gearhead');
+  });
+});
+
+describe('selfhost Android package, BOOX pen default, and manifest/deep-link pruning (P17)', () => {
+  const nativeBridgeGradle = readFileSync(
+    resolve(process.cwd(), 'src-tauri/plugins/tauri-plugin-native-bridge/android/build.gradle.kts'),
+    'utf-8',
+  );
+  const nativeBridgeManifest = readFileSync(
+    resolve(
+      process.cwd(),
+      'src-tauri/plugins/tauri-plugin-native-bridge/android/src/main/AndroidManifest.xml',
+    ),
+    'utf-8',
+  );
+  const tauriConf = JSON.parse(
+    readFileSync(resolve(process.cwd(), 'src-tauri/tauri.conf.json'), 'utf-8'),
+  ) as {
+    productName: string;
+    identifier: string;
+    plugins: {
+      'deep-link': {
+        mobile: Array<{ scheme: string[]; host?: string; appLink?: boolean }>;
+        desktop: { schemes: string[] };
+      };
+    };
+  };
+  const appStringsPath = resolve(
+    process.cwd(),
+    'src-tauri/gen/android/app/src/main/res/values/strings.xml',
+  );
+
+  it('isolates Android applicationId to com.bilingify.readest.selfhost while preserving namespace and app_name', () => {
+    expect(appGradle).toContain('namespace = "com.bilingify.readest"');
+    const applicationIdBlock = appGradle.slice(
+      appGradle.indexOf('applicationId ='),
+      appGradle.indexOf('minSdk ='),
+    );
+    expect(applicationIdBlock).toContain('project.findProperty("applicationId")');
+    expect(applicationIdBlock).toContain('System.getenv("ANDROID_APPLICATION_ID")');
+    expect(applicationIdBlock).toContain('"com.bilingify.readest.selfhost"');
+
+    expect(tauriConf.identifier).toBe('com.bilingify.readest');
+    expect(tauriConf.productName).toBe('Readest');
+    expect(manifest).toContain('android:label="@string/app_name"');
+    if (existsSync(appStringsPath)) {
+      const appStrings = readFileSync(appStringsPath, 'utf-8');
+      expect(appStrings).toMatch(/<string name="app_name">Readest<\/string>/);
+    }
+  });
+
+  it('uses selfhost applicationId fallback with ANDROID_APPLICATION_ID override in Android e2e harness', () => {
+    const testAndroidScript = readFileSync(
+      resolve(process.cwd(), 'scripts/test-android.sh'),
+      'utf-8',
+    );
+    const androidReaderHelper = readFileSync(
+      resolve(process.cwd(), 'src/__tests__/android/helpers/reader.ts'),
+      'utf-8',
+    );
+
+    expect(testAndroidScript).toContain(
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: asserting literal bash parameter expansion
+      'PKG="${ANDROID_APPLICATION_ID:-com.bilingify.readest.selfhost}"',
+    );
+    expect(testAndroidScript).not.toContain('PKG="com.bilingify.readest"');
+
+    expect(androidReaderHelper).toContain("process.env['ANDROID_APPLICATION_ID']");
+    expect(androidReaderHelper).toContain("'com.bilingify.readest.selfhost'");
+    expect(androidReaderHelper).not.toContain("APP_PKG = 'com.bilingify.readest'");
+  });
+
+  it('defaults penFlavor to booxPen across app and native-bridge Gradle configurations', () => {
+    expect(appGradle).toContain(
+      'val penFlavor = project.findProperty("penFlavor")?.toString() ?: "booxPen"',
+    );
+    expect(appGradle).not.toContain('?: "genericPen"');
+    expect(appGradle).toContain(
+      'val storeFlavor = project.findProperty("storeFlavor")?.toString() ?: "foss"',
+    );
+
+    // All four penFlavor checks in app/build.gradle.kts use penFlavor == "booxPen" / penFlavor
+    const penFlavorChecks = appGradle.match(/penFlavor == "booxPen"/g) ?? [];
+    expect(penFlavorChecks).toHaveLength(3);
+    expect(appGradle).toContain('missingDimensionStrategy("pen", penFlavor)');
+    expect(appGradle).toMatch(
+      /if \(penFlavor == "booxPen"\) \{\s*\/\/[^\n]*\n\s*packaging\.jniLibs\.pickFirsts\.add\("lib\/\*\/libc\+\+_shared\.so"\)/,
+    );
+    expect(appGradle).toContain(
+      'if (penFlavor == "booxPen") listOf("libneo_pen.so", "libc++.so") else emptyList()',
+    );
+    expect(appGradle).toMatch(
+      /if \(penFlavor == "booxPen"\) \{\s*repositories \{\s*maven \{ url = uri\("https:\/\/repo\.boox\.com\/repository\/maven-public\/"\) \}/,
+    );
+
+    expect(nativeBridgeGradle).toContain(
+      'if ((findProperty("penFlavor")?.toString() ?: "booxPen") == "booxPen")',
+    );
+    expect(nativeBridgeGradle).not.toContain('if (findProperty("penFlavor") == "booxPen")');
+    expect(nativeBridgeGradle).toContain('https://repo.boox.com/repository/maven-public/');
+  });
+
+  it('prunes commercial, TV, and official deep-link declarations from AndroidManifest.xml', () => {
+    expect(manifest).not.toContain('REQUEST_INSTALL_PACKAGES');
+    expect(manifest).not.toContain('com.android.vending.BILLING');
+    expect(manifest).not.toContain('android.software.leanback');
+    expect(manifest).not.toContain('LEANBACK_LAUNCHER');
+    expect(manifest).not.toContain('web.readest.com');
+    expect(manifest).not.toContain('readest-onedrive');
+    expect(manifest).not.toContain('com.googleusercontent.apps.');
+  });
+
+  it('prunes official web and OAuth schemes from tauri.conf.json mobile deep-link while keeping desktop schemes untouched', () => {
+    const deepLink = tauriConf.plugins['deep-link'];
+    const serializedMobile = JSON.stringify(deepLink.mobile);
+    expect(serializedMobile).not.toContain('web.readest.com');
+    expect(serializedMobile).not.toContain('readest-onedrive');
+    expect(serializedMobile).not.toContain('com.googleusercontent.apps.');
+    expect(deepLink.mobile.some((entry) => entry.scheme.includes('readest'))).toBe(true);
+    expect(deepLink.desktop.schemes).toEqual([
+      'readest',
+      'readest-onedrive',
+      'com.googleusercontent.apps.209390247301-ctpmep68ppfa56r1b8tr35e4qi4p60kq',
+    ]);
+  });
+
+  it('preserves LAN cleartext HTTP, storage access, FileProvider, ebook associations, widgets, and dictionary/Anki queries', () => {
+    expect(manifest).toMatch(/android:usesCleartextTraffic="\$\{usesCleartextTraffic\}"/);
+    expect(manifest).toContain('android.permission.MANAGE_EXTERNAL_STORAGE');
+    expect(manifest).toMatch(/android:authorities="\$\{applicationId\}\.fileprovider"/);
+    expect(manifest).toContain('android:scheme="readest"');
+    expect(manifest).toContain('application/epub+zip');
+    expect(manifest).toContain('android.intent.action.SEND');
+    expect(manifest).toContain('android.intent.action.SEND_MULTIPLE');
+
+    expect(nativeBridgeManifest).toContain('android.intent.action.PROCESS_TEXT');
+    expect(nativeBridgeManifest).toContain('com.ichi2.anki');
+    expect(nativeBridgeManifest).toContain('BookshelfWidgetProvider');
+    expect(nativeBridgeManifest).toContain('ReadingWidgetProvider');
   });
 });

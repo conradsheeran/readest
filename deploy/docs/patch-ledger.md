@@ -572,6 +572,72 @@ flipping their master switches, which is P1.
   whatever the deletion leaves unused.
 - **Status**: applied
 
+### P17 — Isolate Android selfhost package, enable BOOX stylus by default, and prune manifest/deep-links
+
+- **Target**: `apps/readest-app/src-tauri/gen/android/app/build.gradle.kts`,
+  `apps/readest-app/src-tauri/plugins/tauri-plugin-native-bridge/android/build.gradle.kts`,
+  `apps/readest-app/src-tauri/gen/android/app/src/main/AndroidManifest.xml`,
+  `apps/readest-app/src-tauri/tauri.conf.json`,
+  `apps/readest-app/scripts/test-android.sh`, and
+  `apps/readest-app/src/__tests__/android/helpers/reader.ts`
+- **Change**:
+  - In `app/build.gradle.kts`, set `applicationId` via
+    `project.findProperty("applicationId") -> System.getenv("ANDROID_APPLICATION_ID") -> "com.bilingify.readest.selfhost"`
+    while keeping `namespace = "com.bilingify.readest"` and default
+    `storeFlavor = "foss"`, and resolve a top-level
+    `val penFlavor = project.findProperty("penFlavor")?.toString() ?: "booxPen"`
+    across all four `booxPen` checks (`libc++_shared.so` `pickFirsts`,
+    `missingDimensionStrategy("pen", penFlavor)`, `prestrippedLibs`, and the
+    BOOX Maven repository).
+  - In `plugins/tauri-plugin-native-bridge/android/build.gradle.kts`, match the
+    same `(findProperty("penFlavor")?.toString() ?: "booxPen") == "booxPen"`
+    default for the BOOX Maven repository and update its `penFlavor` / BOOX
+    repository comments to match the `booxPen` default.
+  - In `AndroidManifest.xml`, remove `REQUEST_INSTALL_PACKAGES`,
+    `com.android.vending.BILLING`, the `android.software.leanback` feature, the
+    `LEANBACK_LAUNCHER` intent filter, the `https://web.readest.com` App Link
+    intent filter, and the Google Drive (`com.googleusercontent.apps.*`) and
+    `readest-onedrive` OAuth callback `<data android:scheme=.../>` entries while
+    keeping `readest`, `usesCleartextTraffic`, `MANAGE_EXTERNAL_STORAGE`,
+    `${applicationId}.fileprovider`, ebook MIME/extension `VIEW` filters, and
+    `SEND` / `SEND_MULTIPLE`.
+  - In `tauri.conf.json`, trim `plugins.deep-link.mobile` to
+    `[{"scheme": ["readest"], "appLink": false}]` (removing `web.readest.com`,
+    Google Drive, and `readest-onedrive`), while leaving
+    `plugins.deep-link.desktop.schemes` untouched because desktop builds are out
+    of scope.
+  - In `scripts/test-android.sh` (`PKG="${ANDROID_APPLICATION_ID:-com.bilingify.readest.selfhost}"`)
+    and `src/__tests__/android/helpers/reader.ts` (`APP_PKG = process.env['ANDROID_APPLICATION_ID']?.trim() || 'com.bilingify.readest.selfhost'`),
+    update the local `pnpm test:android` CDP e2e lane to target the isolated
+    selfhost package and honor `ANDROID_APPLICATION_ID`.
+- **Effect**: the self-hosted APK installs side-by-side with official Readest
+  under `com.bilingify.readest.selfhost` (with launcher label `Readest` and zero
+  Kotlin/JNI package rename churn), enables hardware Onyx BOOX stylus rendering
+  by default on BOOX E-ink readers while falling back cleanly at runtime on
+  standard Android phones, stops hijacking `web.readest.com` links or upstream
+  OAuth schemes, and drops OTA self-install, Play Billing, and Android TV
+  declarations.
+- **Why not configuration**: `applicationId`, Gradle flavor selection, Android
+  manifest permissions/intent-filters, and `tauri.conf.json` deep-link blocks
+  are static native build declarations with no runtime override. Notice that
+  `tauri android init` in CI is immediately followed by `git checkout .`, which
+  restores these tracked files before Gradle runs.
+- **Tests**: `src/__tests__/android/android-auto-declarations.test.ts` asserts
+  the `com.bilingify.readest.selfhost` fallback chain, preserved
+  `namespace = "com.bilingify.readest"`, `booxPen` default in both Gradle files,
+  removed permissions/TV/App-Link/OAuth declarations, retained `readest` / LAN /
+  storage / `FileProvider` / ebook / share-target declarations, pruned
+  `tauri.conf.json` mobile deep-link config with untouched desktop schemes, and
+  updated `scripts/test-android.sh` and `helpers/reader.ts` package resolution.
+- **Conflict risk**: **medium.** Touches generated-and-tracked Android Gradle /
+  manifest files and `tauri.conf.json`.
+- **When it breaks**: upstream changes `app/build.gradle.kts`,
+  `AndroidManifest.xml`, or `tauri.conf.json` (for example adding a new ebook
+  extension filter or updating BOOX SDK coordinates). Keep upstream's new ebook
+  filters/SDK versions and re-apply the `applicationId`, `booxPen` default, and
+  permission/App-Link/OAuth deletions.
+- **Status**: applied
+
 ---
 
 ## Part 3 — Resolved decisions
