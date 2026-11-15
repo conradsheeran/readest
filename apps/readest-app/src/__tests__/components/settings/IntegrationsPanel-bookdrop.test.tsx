@@ -10,7 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }) }));
 vi.mock('@/context/EnvContext', () => ({
-  useEnv: () => ({ envConfig: {}, appService: { isDesktopApp: true } }),
+  useEnv: () => ({ envConfig: {}, appService: { isDesktopApp: true, isMacOSApp: true } }),
 }));
 vi.mock('@/context/AuthContext', () => ({ useAuth: () => ({ user: null }) }));
 vi.mock('@/hooks/useTranslation', () => ({
@@ -136,5 +136,45 @@ describe('IntegrationsPanel Data Flow icon', () => {
     expect(
       screen.getByText('See where your reading data comes from and where it goes'),
     ).toBeTruthy();
+  });
+});
+
+describe('IntegrationsPanel supported connectors (P23)', () => {
+  it('renders only the 7 supported connectors and Data Flow, hiding the 11 pruned ones', () => {
+    render(<IntegrationsPanel />);
+
+    const kept = [
+      'Nearby BookDrop',
+      'KOReader',
+      'Obsidian',
+      'Readest Cloud',
+      'WebDAV',
+      'S3 Storage',
+      'OPDS Catalogs',
+    ];
+    for (const label of kept) {
+      expect(screen.getByText(label)).toBeTruthy();
+    }
+    expect(screen.getByRole('button', { name: 'Data Flow' })).toBeTruthy();
+
+    const pruned = [
+      'Google Drive',
+      'OneDrive',
+      'iCloud',
+      'Notion',
+      'Audiobookshelf',
+      'Readwise',
+      'Hardcover',
+      'Pagebound',
+      'BookOrbit',
+      'Grimmory',
+      'Show on Discord',
+      'Discord',
+      'Send to Readest',
+    ];
+    for (const label of pruned) {
+      expect(screen.queryByText(label)).toBeNull();
+    }
+    expect(document.querySelector('[data-setting-id="settings.integrations.discord"]')).toBeNull();
   });
 });

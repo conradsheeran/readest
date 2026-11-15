@@ -811,6 +811,40 @@ flipping their master switches, which is P1.
   compatible and returning `false` / `[]` / no-op with zero network calls.
 - **Status**: applied
 
+### P23 — Slim Settings Integrations and Data Flow to the 7 supported connectors
+
+- **Target**: `apps/readest-app/src/components/settings/IntegrationsPanel.tsx`
+  and `apps/readest-app/src/components/settings/integrations/useFlowConnectors.ts`
+- **Change**: export `SUPPORTED_FLOW_CONNECTOR_IDS` (`'readest-cloud'`,
+  `'webdav'`, `'s3'`, `'obsidian'`, `'kosync'`, `'opds'`, `'localsend'`) from
+  `useFlowConnectors.ts` and filter `useFlowConnectors` through that allowlist
+  (which serves as the single allowlist chokepoint consumed by both
+  `IntegrationsPanel.tsx` and the Data Flow page, including connection health
+  probes). In `IntegrationsPanel.tsx`, remove the rows for `Google Drive`,
+  `OneDrive`, `iCloud`, `Notion`, `Audiobookshelf`, `Readwise`, `Hardcover`,
+  `Pagebound`, `BookOrbit`, and `Grimmory`, plus the entire `Discord` section
+  (`Discord Rich Presence`), while leaving `SubPage`, `ConnectorId` schemas, and
+  subpage component files untouched.
+- **Effect**: Settings → Integrations and its Data Flow view display and probe
+  only the seven connectors that genuinely work in a self-hosted Web + Android +
+  BOOX deployment (`Readest Cloud`, `WebDAV`, `S3`, `Obsidian`, `KOReader Sync`,
+  `OPDS Catalogs`, and `Nearby BookDrop`, plus the `Data Flow` entry row),
+  alongside **P13** hiding `Send to Readest`.
+- **Why not configuration**: `IntegrationsPanel.tsx` and `useFlowConnectors.ts`
+  hardcode the full upstream catalog with no per-connector feature flags.
+- **Tests**: `src/__tests__/components/settings/IntegrationsPanel-bookdrop.test.tsx`
+  and `src/__tests__/components/settings/DataFlowPage.test.tsx` assert all seven
+  supported integrations render and all eleven pruned connectors (plus `Discord`)
+  are absent from both Integrations and Data Flow.
+- **Conflict risk**: **medium.** Upstream actively adds new third-party
+  connectors to `IntegrationsPanel.tsx` and `useFlowConnectors.ts`.
+- **When it breaks**: upstream adds a new third-party connector row in
+  `IntegrationsPanel.tsx` or `useFlowConnectors.ts`. Keep
+  `SUPPORTED_FLOW_CONNECTOR_IDS` as the explicit allowlist in Data Flow and drop
+  any newly added unsupported row in `IntegrationsPanel.tsx` unless deliberately
+  adopted.
+- **Status**: applied
+
 ---
 
 ## Part 3 — Resolved decisions
@@ -833,8 +867,9 @@ published book covers are broken here in two independent ways.
 
 Fixing it means standing up a publicly readable bucket with its own domain and
 making the constant configurable: new infrastructure, in exchange for share-link
-and Discord-presence cover images. Revisit if share links are ever actually used.
-Recorded in `known-limitations.md`.
+and Discord-presence cover images. Both client entry points (`Share Book` and
+`Discord Rich Presence`) are now removed by **P21** and **P23**; revisit only if
+share links are ever restored. Recorded in `known-limitations.md`.
 
 ### O3 — The WordLens glossary CDN → **keep it**
 

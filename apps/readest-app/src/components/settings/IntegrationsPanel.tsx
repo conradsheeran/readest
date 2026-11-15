@@ -3,23 +3,12 @@ import React, { useEffect, useState } from 'react';
 import { MdChevronRight } from 'react-icons/md';
 import {
   RiBookOpenLine,
-  RiPlanetLine,
   RiRssLine,
-  RiBookReadLine,
-  RiBook3Line,
-  RiBookmark3Line,
-  RiFileList3Line,
   RiMarkdownLine,
-  RiDiscordLine,
   RiWifiLine,
   RiCloudLine,
   RiCloudFill,
   RiDatabase2Line,
-  RiGoogleLine,
-  RiMicrosoftLine,
-  RiAppleLine,
-  RiHeadphoneLine,
-  RiBookShelfLine,
   RiAlertLine,
   RiInformationLine,
 } from 'react-icons/ri';
@@ -31,11 +20,9 @@ import { useKeyDownActions } from '@/hooks/useKeyDownActions';
 import { useQuotaStats } from '@/hooks/useQuotaStats';
 import { useSettingsStore } from '@/store/settingsStore';
 import { useCustomOPDSStore } from '@/store/customOPDSStore';
-import { useABSServerStore } from '@/store/absServerStore';
 import { useFileSyncStore } from '@/store/fileSyncStore';
 import { useLocalSendStore } from '@/store/localsendStore';
 import { CatalogManager } from '@/app/opds/components/CatalogManager';
-import { saveSysSettings } from '@/helpers/settings';
 import { isCloudSyncAllowed } from '@/utils/access';
 import { isTauriAppPlatform, isWebAppPlatform } from '@/services/environment';
 import {
@@ -43,10 +30,6 @@ import {
   isLocalSendEnabled,
   setLocalSendEnabled,
 } from '@/services/localsend/devicePrefs';
-import { getGoogleWebClientId } from '@/services/sync/providers/gdrive/buildGoogleDriveProvider';
-import { getMicrosoftClientId } from '@/services/sync/providers/onedrive/buildOneDriveProvider';
-import { isICloudSupportedPlatform } from '@/services/sync/providers/icloud/buildICloudProvider';
-import { getICloudContainerStatus } from '@/utils/bridge';
 import { navigateToLogin, navigateToProfile } from '@/utils/nav';
 import { eventDispatcher } from '@/utils/event';
 import ABSForm from './integrations/ABSForm';
@@ -80,7 +63,6 @@ import {
   type CloudSyncProviderKind,
 } from '@/services/sync/cloudSyncProvider';
 import type { FileSyncBackendKind } from '@/services/sync/file/providerRegistry';
-import { canBackendRun } from '@/services/sync/file/runLibrarySync';
 import { getConnectorHealth } from '@/services/sync/dataFlow/log';
 import DataFlowPage from './integrations/DataFlowPage';
 import { useFlowConnectors, useFlowState } from './integrations/useFlowConnectors';
@@ -129,8 +111,6 @@ const IntegrationsPanel: React.FC = () => {
   const { settings, requestedSubPage, setRequestedSubPage } = useSettingsStore();
   const opdsCatalogs = useCustomOPDSStore((s) => s.catalogs);
   const opdsCount = opdsCatalogs.filter((c) => !c.deletedAt).length;
-  const absServers = useABSServerStore((s) => s.servers);
-  const absCount = absServers.filter((s) => !s.deletedAt).length;
   // The device name Nearby BookDrop announces once its service is running,
   // so the integrations row can show it in place of a bare "On".
   const localSendAlias = useLocalSendStore((s) => s.status?.alias);
@@ -146,24 +126,9 @@ const IntegrationsPanel: React.FC = () => {
   // status line. Keeps the user from feeling like the run was lost
   // when they back out of the WebDAV sub-page or close the dialog.
   const isWebDAVSyncing = useFileSyncStore((s) => s.byKind.webdav?.isSyncing ?? false);
-  const isGDriveSyncing = useFileSyncStore((s) => s.byKind.gdrive?.isSyncing ?? false);
   const isS3Syncing = useFileSyncStore((s) => s.byKind.s3?.isSyncing ?? false);
-  const isOneDriveSyncing = useFileSyncStore((s) => s.byKind.onedrive?.isSyncing ?? false);
   const webdavLastError = useFileSyncStore((s) => s.lastErrorByKind.webdav);
-  const gdriveLastError = useFileSyncStore((s) => s.lastErrorByKind.gdrive);
   const s3LastError = useFileSyncStore((s) => s.lastErrorByKind.s3);
-  const onedriveLastError = useFileSyncStore((s) => s.lastErrorByKind.onedrive);
-  const isICloudSyncing = useFileSyncStore((s) => s.byKind.icloud?.isSyncing ?? false);
-  const icloudLastError = useFileSyncStore((s) => s.lastErrorByKind.icloud);
-  // "Configured" for iCloud = the container is reachable (an entitled build
-  // with an iCloud session). Probed once; Apple Tauri platforms only.
-  const [icloudAvailable, setICloudAvailable] = useState(false);
-  useEffect(() => {
-    if (!isICloudSupportedPlatform()) return;
-    getICloudContainerStatus()
-      .then((s) => setICloudAvailable(!!s.available && !!s.documentsPath))
-      .catch(() => setICloudAvailable(false));
-  }, []);
   // Third-party cloud sync will be a premium feature (any paid plan), but it is
   // temporarily UNGATED while the feature stabilises — `isCloudSyncAllowed`
   // returns true for every plan until `CLOUD_SYNC_REQUIRES_PREMIUM` is flipped
@@ -191,12 +156,6 @@ const IntegrationsPanel: React.FC = () => {
     void useCustomOPDSStore.getState().loadCustomOPDSCatalogs(envConfig);
   }, [envConfig]);
 
-  // Same hydration as above, for the Audiobookshelf server list — keeps the
-  // Content Sources row's server count accurate on first open.
-  useEffect(() => {
-    void useABSServerStore.getState().loadABSServers(envConfig);
-  }, [envConfig]);
-
   // Android Back / Esc: when any integrations sub-page (KOSync, WebDAV,
   // Readwise, Hardcover, OPDS, Send-to-Readest) is open, intercept and
   // step back to the integrations list instead of letting <Dialog>'s
@@ -210,14 +169,6 @@ const IntegrationsPanel: React.FC = () => {
     enabled: subPage !== null,
     onCancel: () => setSubPage(null),
   });
-
-  const toggleDiscordPresence = () => {
-    const discordRichPresenceEnabled = !settings.discordRichPresenceEnabled;
-    saveSysSettings(envConfig, 'discordRichPresenceEnabled', discordRichPresenceEnabled);
-    if (discordRichPresenceEnabled && !user) {
-      navigateToLogin(router);
-    }
-  };
 
   // Deep-link consumption: when a caller (e.g. OPDS browser close handler)
   // sets `requestedSubPage` in the store before opening the dialog, drill
@@ -547,26 +498,6 @@ const IntegrationsPanel: React.FC = () => {
       : _('Connected')
     : _('Not connected');
 
-  const bookOrbitStatus = settings.bookorbit?.enabled
-    ? settings.bookorbit.username
-      ? _('Connected as {{user}}', { user: settings.bookorbit.username })
-      : _('Connected')
-    : _('Not connected');
-
-  const grimmoryStatus = settings.grimmory?.enabled
-    ? _('Connected as {{user}}', { user: settings.grimmory.username })
-    : _('Not connected');
-
-  const readwiseStatus = settings.readwise?.enabled ? _('Connected') : _('Not connected');
-  const hardcoverStatus = settings.hardcover?.enabled ? _('Connected') : _('Not connected');
-  const pageboundStatus =
-    settings.pagebound?.enabled && settings.pagebound.refreshToken
-      ? _('Connected')
-      : _('Not connected');
-  const notionStatus =
-    settings.notion?.enabled && settings.notion.accessToken && settings.notion.databaseId
-      ? _('Connected')
-      : _('Not connected');
   const obsidianStatus =
     settings.obsidian?.enabled && settings.obsidian.folder ? _('On') : _('Off');
 
@@ -588,7 +519,6 @@ const IntegrationsPanel: React.FC = () => {
     );
 
   const webdavConfigured = !!(settings.webdav?.serverUrl && settings.webdav?.username);
-  const gdriveConfigured = !!settings.googleDrive?.accountLabel;
   const webdavStatus = getThirdPartyRowStatus(_, {
     enabled: !!settings.webdav?.enabled,
     configured: webdavConfigured,
@@ -597,17 +527,6 @@ const IntegrationsPanel: React.FC = () => {
     lastError: webdavLastError,
     syncBooks: settings.webdav?.syncBooks ?? false,
     booksBackedUpElsewhere: booksBackedUpBy('webdav'),
-  });
-  const gdriveStatus = getThirdPartyRowStatus(_, {
-    enabled: !!settings.googleDrive?.enabled,
-    configured: gdriveConfigured,
-    syncing: isGDriveSyncing,
-    paused: cloudGate.paused,
-    lastError: gdriveLastError,
-    syncBooks: settings.googleDrive?.syncBooks ?? false,
-    booksBackedUpElsewhere: booksBackedUpBy('gdrive'),
-    // Web Google Drive with a gone/expired token can't sync until reconnected.
-    needsReauth: !canBackendRun('gdrive'),
   });
   const s3Configured = !!(
     settings.s3?.endpoint &&
@@ -624,25 +543,6 @@ const IntegrationsPanel: React.FC = () => {
     syncBooks: settings.s3?.syncBooks ?? false,
     booksBackedUpElsewhere: booksBackedUpBy('s3'),
   });
-  const onedriveConfigured = !!settings.onedrive?.accountLabel;
-  const onedriveStatus = getThirdPartyRowStatus(_, {
-    enabled: !!settings.onedrive?.enabled,
-    configured: onedriveConfigured,
-    syncing: isOneDriveSyncing,
-    paused: cloudGate.paused,
-    lastError: onedriveLastError,
-    syncBooks: settings.onedrive?.syncBooks ?? false,
-    booksBackedUpElsewhere: booksBackedUpBy('onedrive'),
-  });
-  const icloudStatus = getThirdPartyRowStatus(_, {
-    enabled: !!settings.icloud?.enabled,
-    configured: icloudAvailable,
-    syncing: isICloudSyncing,
-    paused: cloudGate.paused,
-    lastError: icloudLastError,
-    syncBooks: settings.icloud?.syncBooks ?? false,
-    booksBackedUpElsewhere: booksBackedUpBy('icloud'),
-  });
   const readestStatus = getReadestCloudRowStatus(_, {
     signedIn: !!user,
     planLoading: userProfilePlan === undefined,
@@ -655,7 +555,6 @@ const IntegrationsPanel: React.FC = () => {
 
   const opdsStatus =
     opdsCount > 0 ? _('{{count}} catalog', { count: opdsCount }) : _('No catalogs');
-  const absStatus = absCount > 0 ? _('{{count}} server', { count: absCount }) : _('No servers');
   // Enabled rows show the announced device name (falling back to the stored
   // custom alias, then a bare "On" until the service reports its alias).
   const localSendName = localSendAlias || getLocalSendAlias();
@@ -725,45 +624,6 @@ const IntegrationsPanel: React.FC = () => {
               status={koSyncStatus}
               onClick={() => setSubPage('kosync')}
             />
-            <IntegrationRow
-              icon={RiPlanetLine}
-              title={_('BookOrbit')}
-              status={bookOrbitStatus}
-              onClick={() => setSubPage('bookorbit')}
-            />
-            <IntegrationRow
-              icon={RiBookShelfLine}
-              title={_('Grimmory')}
-              status={grimmoryStatus}
-              onClick={() => setSubPage('grimmory')}
-            />
-            <IntegrationRow
-              icon={RiBookReadLine}
-              title={_('Readwise')}
-              status={readwiseStatus}
-              onClick={() => setSubPage('readwise')}
-            />
-            <IntegrationRow
-              icon={RiBook3Line}
-              title={_('Hardcover')}
-              status={hardcoverStatus}
-              onClick={() => setSubPage('hardcover')}
-            />
-            {/* Pagebound's API sends no CORS headers, so only native HTTP reaches it. */}
-            {isTauriAppPlatform() && (
-              <IntegrationRow
-                icon={RiBookmark3Line}
-                title={_('Pagebound')}
-                status={pageboundStatus}
-                onClick={() => setSubPage('pagebound')}
-              />
-            )}
-            <IntegrationRow
-              icon={RiFileList3Line}
-              title={_('Notion')}
-              status={notionStatus}
-              onClick={() => setSubPage('notion')}
-            />
             {/* Writes into a local vault folder: desktop and Android only for now. */}
             {(appService?.isDesktopApp || appService?.isAndroidApp) && (
               <IntegrationRow
@@ -798,29 +658,6 @@ const IntegrationsPanel: React.FC = () => {
             {/* Third-party providers are premium: every row carries the tier
                 badge; on a free plan the checkbox is disabled and opening a
                 row routes to the upgrade page instead of the config sub-page. */}
-            {(appService?.isDesktopApp ||
-              appService?.isAndroidApp ||
-              appService?.isIOSApp ||
-              // Web: only when a Web-type GIS client id is configured for this build.
-              (isWebAppPlatform() && !!getGoogleWebClientId())) && (
-              <CloudProviderRow
-                icon={RiGoogleLine}
-                title={_('Google Drive')}
-                status={gdriveStatus}
-                badge={premiumBadge}
-                checked={!!settings.googleDrive?.enabled}
-                canToggle={canToggleCloudProvider({
-                  isPremium: isCloudSyncPremium,
-                  isConfigured: gdriveConfigured,
-                  isEnabled: !!settings.googleDrive?.enabled,
-                })}
-                onToggle={(next) => toggleCloudProvider('gdrive', next)}
-                onOpen={() =>
-                  isCloudSyncPremium ? setSubPage('gdrive') : navigateToProfile(router)
-                }
-                toggleLabel={_('Sync with Google Drive')}
-              />
-            )}
             <CloudProviderRow
               icon={RiCloudLine}
               title={_('WebDAV')}
@@ -851,48 +688,6 @@ const IntegrationsPanel: React.FC = () => {
               onOpen={() => (isCloudSyncPremium ? setSubPage('s3') : navigateToProfile(router))}
               toggleLabel={_('Sync with S3')}
             />
-            {(appService?.isDesktopApp ||
-              appService?.isAndroidApp ||
-              appService?.isIOSApp ||
-              // Web: only when a Web-type Microsoft client id is configured for this build.
-              (isWebAppPlatform() && !!getMicrosoftClientId())) && (
-              <CloudProviderRow
-                icon={RiMicrosoftLine}
-                title={_('OneDrive')}
-                status={onedriveStatus}
-                badge={premiumBadge}
-                checked={!!settings.onedrive?.enabled}
-                canToggle={canToggleCloudProvider({
-                  isPremium: isCloudSyncPremium,
-                  isConfigured: onedriveConfigured,
-                  isEnabled: !!settings.onedrive?.enabled,
-                })}
-                onToggle={(next) => toggleCloudProvider('onedrive', next)}
-                onOpen={() =>
-                  isCloudSyncPremium ? setSubPage('onedrive') : navigateToProfile(router)
-                }
-                toggleLabel={_('Sync with OneDrive')}
-              />
-            )}
-            {(appService?.isIOSApp || appService?.isMacOSApp) && (
-              <CloudProviderRow
-                icon={RiAppleLine}
-                title={_('iCloud')}
-                status={icloudStatus}
-                badge={premiumBadge}
-                checked={!!settings.icloud?.enabled}
-                canToggle={canToggleCloudProvider({
-                  isPremium: isCloudSyncPremium,
-                  isConfigured: icloudAvailable,
-                  isEnabled: !!settings.icloud?.enabled,
-                })}
-                onToggle={(next) => toggleCloudProvider('icloud', next)}
-                onOpen={() =>
-                  isCloudSyncPremium ? setSubPage('icloud') : navigateToProfile(router)
-                }
-                toggleLabel={_('Sync with iCloud')}
-              />
-            )}
           </div>
         </div>
         {providers.length === 0 && (
@@ -923,32 +718,9 @@ const IntegrationsPanel: React.FC = () => {
               status={opdsStatus}
               onClick={() => setSubPage('opds')}
             />
-            <IntegrationRow
-              icon={RiHeadphoneLine}
-              title={_('Audiobookshelf')}
-              status={absStatus}
-              onClick={() => setSubPage('audiobookshelf')}
-            />
           </div>
         </div>
       </div>
-
-      {appService?.isDesktopApp && (
-        <div className='w-full' data-setting-id='settings.integrations.discord'>
-          <SectionTitle className='mb-2'>{_('Discord')}</SectionTitle>
-          <div className='card eink-bordered border-base-200 bg-base-100 overflow-hidden border'>
-            <div className='divide-base-200 divide-y'>
-              <IntegrationToggleRow
-                icon={RiDiscordLine}
-                title={_('Show on Discord')}
-                description={_("Display what I'm reading on Discord")}
-                checked={settings.discordRichPresenceEnabled}
-                onChange={toggleDiscordPresence}
-              />
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
@@ -1071,45 +843,6 @@ const CloudProviderRow: React.FC<CloudProviderRowProps> = ({
         <MdChevronRight className='h-5 w-5' />
       </button>
     </div>
-  );
-};
-
-interface IntegrationToggleRowProps {
-  icon: React.ElementType;
-  title: string;
-  description: string;
-  checked: boolean;
-  onChange: () => void;
-}
-
-/**
- * Sibling of IntegrationRow for settings that are a simple on/off toggle
- * (no sub-page). Keeps the same circular-badge chassis so toggle and
- * navigation rows read as one consistent list.
- */
-const IntegrationToggleRow: React.FC<IntegrationToggleRowProps> = ({
-  icon: Icon,
-  title,
-  description,
-  checked,
-  onChange,
-}) => {
-  return (
-    <label className='flex w-full cursor-pointer items-center gap-3 px-4 py-3 text-left'>
-      <span
-        className={clsx(
-          'flex h-9 w-9 shrink-0 items-center justify-center rounded-full',
-          'bg-base-200 text-base-content/70',
-        )}
-      >
-        <Icon className='h-5 w-5' />
-      </span>
-      <div className='flex min-w-0 flex-1 flex-col gap-0.5'>
-        <SettingLabel>{title}</SettingLabel>
-        <span className='text-base-content/65 truncate text-[0.85em]'>{description}</span>
-      </div>
-      <input type='checkbox' className='toggle shrink-0' checked={checked} onChange={onChange} />
-    </label>
   );
 };
 

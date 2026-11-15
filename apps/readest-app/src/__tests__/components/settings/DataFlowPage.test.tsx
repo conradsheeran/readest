@@ -1,23 +1,48 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FlowConnector } from '@/services/sync/dataFlow/connectors';
+import type { ConnectorId } from '@/services/sync/dataFlow/types';
 import { readFlowState, recordConnectionCheck, recordFlow } from '@/services/sync/dataFlow/log';
+import { useABSServerStore } from '@/store/absServerStore';
+import { useCustomOPDSStore } from '@/store/customOPDSStore';
+import { useSettingsStore } from '@/store/settingsStore';
+import type { ABSServer } from '@/types/audiobookshelf';
+import type { OPDSCatalog } from '@/types/opds';
+import type { SystemSettings } from '@/types/settings';
 
-const h = vi.hoisted(() => ({ connectors: [] as unknown[], ask: vi.fn() }));
+const h = vi.hoisted(() => ({
+  connectors: [] as unknown[],
+  ask: vi.fn(),
+  useReal: false,
+  user: null as { id: string } | null,
+  tauri: false,
+}));
 
 vi.mock('@/hooks/useTranslation', () => ({
   useTranslation: () => (s: string, o?: Record<string, unknown>) =>
     s.replace(/\{\{(\w+)\}\}/g, (_m, k) => String(o?.[k] ?? '')),
 }));
 vi.mock('@/context/EnvContext', () => ({
-  useEnv: () => ({ appService: { ask: h.ask } }),
+  useEnv: () => ({ envConfig: {}, appService: { ask: h.ask } }),
 }));
-vi.mock('@/components/settings/integrations/useFlowConnectors', async (importOriginal) => ({
-  ...(await importOriginal<
-    typeof import('@/components/settings/integrations/useFlowConnectors')
-  >()),
-  useFlowConnectors: () => h.connectors,
+vi.mock('@/context/AuthContext', () => ({
+  useAuth: () => ({ user: h.user, token: null }),
 }));
+vi.mock('@/services/environment', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/services/environment')>()),
+  isTauriAppPlatform: () => h.tauri,
+}));
+vi.mock('@/components/settings/integrations/useFlowConnectors', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@/components/settings/integrations/useFlowConnectors')>();
+  return {
+    ...actual,
+    useFlowConnectors: () => {
+      const real = actual.useFlowConnectors();
+      return h.useReal ? real : h.connectors;
+    },
+  };
+});
 
 import DataFlowPage from '@/components/settings/integrations/DataFlowPage';
 
@@ -30,9 +55,9 @@ const kosync = (over: Partial<FlowConnector> = {}): FlowConnector => ({
   ...over,
 });
 
-const readwise = (over: Partial<FlowConnector> = {}): FlowConnector => ({
-  id: 'readwise',
-  title: 'Readwise',
+const obsidian = (over: Partial<FlowConnector> = {}): FlowConnector => ({
+  id: 'obsidian',
+  title: 'Obsidian',
   sources: [],
   sinks: ['notes'],
   check: vi.fn(async () => ({ ok: true })),
@@ -49,6 +74,12 @@ const renderPage = async (onOpenSettings = vi.fn()) => {
 beforeEach(() => {
   localStorage.clear();
   h.connectors = [];
+  h.useReal = false;
+  h.user = null;
+  h.tauri = false;
+  useSettingsStore.setState({ settings: {} as SystemSettings });
+  useABSServerStore.setState({ servers: [] });
+  useCustomOPDSStore.setState({ catalogs: [] });
 });
 
 afterEach(() => {
@@ -57,13 +88,13 @@ afterEach(() => {
 
 describe('DataFlowPage diagram', () => {
   it('puts sources on one side and sinks on the other', async () => {
-    h.connectors = [kosync(), readwise()];
+    h.connectors = [kosync(), obsidian()];
     await renderPage();
 
     expect(column('Sources').getByText('KOReader')).toBeTruthy();
-    expect(column('Sources').queryByText('Readwise')).toBeNull();
+    expect(column('Sources').queryByText('Obsidian')).toBeNull();
     expect(column('Destinations').getByText('KOReader')).toBeTruthy();
-    expect(column('Destinations').getByText('Readwise')).toBeTruthy();
+    expect(column('Destinations').getByText('Obsidian')).toBeTruthy();
   });
 
   it('shows entries received on the source side and sent on the sink side', async () => {
@@ -77,15 +108,20 @@ describe('DataFlowPage diagram', () => {
   });
 
   it('says which integrations need attention in words', async () => {
-    h.connectors = [kosync(), readwise()];
+    h.connectors = [kosync(), obsidian()];
     recordConnectionCheck('kosync', { ok: true });
-    recordConnectionCheck('readwise', { ok: true });
-    recordFlow({ connector: 'readwise', direction: 'push', kind: 'notes', error: 'Bad token' });
+    recordConnectionCheck('obsidian', { ok: true });
+    recordFlow({
+      connector: 'obsidian',
+      direction: 'push',
+      kind: 'notes',
+      error: 'Folder not available',
+    });
     await renderPage();
 
     expect(screen.getByText('Working: 1')).toBeTruthy();
     expect(screen.getByText('Needs attention: 1')).toBeTruthy();
-    expect(column('Destinations').getByLabelText('Readwise: Needs attention')).toBeTruthy();
+    expect(column('Destinations').getByLabelText('Obsidian: Needs attention')).toBeTruthy();
     expect(column('Destinations').getByLabelText('KOReader: Working')).toBeTruthy();
   });
 
@@ -142,11 +178,11 @@ describe('DataFlowPage reset', () => {
 describe('DataFlowPage connection checks', () => {
   it('checks every integration when the page opens', async () => {
     const first = kosync();
-    const second = readwise();
+    const second = obsidian();
     h.connectors = [first, second];
     await renderPage();
 
-    await waitFor(() => expect(readFlowState().checks.readwise?.ok).toBe(true));
+    await waitFor(() => expect(readFlowState().checks.obsidian?.ok).toBe(true));
     expect(first.check).toHaveBeenCalledTimes(1);
     expect(second.check).toHaveBeenCalledTimes(1);
   });
@@ -173,40 +209,40 @@ describe('DataFlowPage connection checks', () => {
 });
 
 describe('DataFlowPage integration details', () => {
-  const openReadwise = async () => {
-    h.connectors = [readwise()];
+  const openObsidian = async () => {
+    h.connectors = [obsidian()];
     await renderPage();
-    fireEvent.click(column('Destinations').getByLabelText(/Readwise/));
+    fireEvent.click(column('Destinations').getByLabelText(/Obsidian/));
   };
 
   it('shows the connection and the sync history apart', async () => {
-    recordConnectionCheck('readwise', { ok: true });
+    recordConnectionCheck('obsidian', { ok: true });
     recordFlow({
-      connector: 'readwise',
+      connector: 'obsidian',
       direction: 'push',
       kind: 'notes',
       count: 3,
       bookTitle: 'Dune',
     });
     recordFlow({
-      connector: 'readwise',
+      connector: 'obsidian',
       direction: 'push',
       kind: 'notes',
       bookTitle: 'Emma',
-      error: 'Bad token',
+      error: 'Folder not available',
     });
-    await openReadwise();
+    await openObsidian();
 
     expect(screen.getByText('Connection')).toBeTruthy();
     expect(screen.getByText('Connected')).toBeTruthy();
     expect(screen.getByText('Sync History')).toBeTruthy();
     expect(screen.getByText('Dune')).toBeTruthy();
-    expect(screen.getAllByText(/Bad token/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Folder not available/).length).toBeGreaterThan(0);
   });
 
   it('leaves out other integrations from the history', async () => {
     recordFlow({ connector: 'kosync', direction: 'push', kind: 'progress', bookTitle: 'Emma' });
-    await openReadwise();
+    await openObsidian();
 
     expect(screen.queryByText('Emma')).toBeNull();
     expect(screen.getByText('Nothing has synced yet')).toBeTruthy();
@@ -214,12 +250,111 @@ describe('DataFlowPage integration details', () => {
 
   it('opens the settings of the integration', async () => {
     const onOpenSettings = vi.fn();
-    h.connectors = [readwise()];
+    h.connectors = [obsidian()];
     await renderPage(onOpenSettings);
-    fireEvent.click(column('Destinations').getByLabelText(/Readwise/));
+    fireEvent.click(column('Destinations').getByLabelText(/Obsidian/));
 
     fireEvent.click(screen.getByRole('button', { name: 'Open Settings' }));
 
-    expect(onOpenSettings).toHaveBeenCalledWith('readwise');
+    expect(onOpenSettings).toHaveBeenCalledWith('obsidian');
+  });
+});
+
+describe('DataFlowPage supported connectors (P23)', () => {
+  it('filters pruned connectors out of real useFlowConnectors even when configured in stores', async () => {
+    h.useReal = true;
+    h.user = { id: 'u1' };
+    h.tauri = true;
+
+    const keptIds: ConnectorId[] = [
+      'readest-cloud',
+      'webdav',
+      's3',
+      'obsidian',
+      'kosync',
+      'opds',
+      'localsend',
+    ];
+    const prunedIds: ConnectorId[] = [
+      'gdrive',
+      'onedrive',
+      'icloud',
+      'notion',
+      'audiobookshelf',
+      'readwise',
+      'hardcover',
+      'pagebound',
+      'bookorbit',
+      'grimmory',
+      'send',
+    ];
+    for (const id of keptIds) {
+      recordConnectionCheck(id, { ok: true });
+    }
+
+    useSettingsStore.setState({
+      settings: {
+        readestCloud: { enabled: true },
+        webdav: { enabled: true, syncProgress: true },
+        s3: { enabled: true, syncProgress: true },
+        obsidian: { enabled: true, folder: '/vault' },
+        kosync: { enabled: true, username: 'reader' },
+        googleDrive: { enabled: true },
+        onedrive: { enabled: true },
+        icloud: { enabled: true },
+        notion: { enabled: true, accessToken: 't', databaseId: 'd' },
+        readwise: { enabled: true, accessToken: 't' },
+        hardcover: { enabled: true, accessToken: 't' },
+        pagebound: { enabled: true, refreshToken: 'r' },
+        bookorbit: { enabled: true, syncProgress: true },
+        grimmory: {
+          enabled: true,
+          serverUrl: 'https://g',
+          username: 'u',
+          password: 'p',
+          syncProgress: true,
+        },
+      } as unknown as SystemSettings,
+    });
+    useABSServerStore.setState({
+      servers: [{ id: 'abs-1', name: 'ABS', url: 'https://abs.example' } as ABSServer],
+    });
+    useCustomOPDSStore.setState({
+      catalogs: [{ id: 'opds-1', name: 'OPDS', url: 'https://opds.example' } as OPDSCatalog],
+    });
+
+    await renderPage();
+
+    const checkedIds = Object.keys(readFlowState().checks);
+    for (const id of prunedIds) {
+      expect(checkedIds).not.toContain(id);
+    }
+
+    for (const title of [
+      'Readest Cloud',
+      'WebDAV',
+      'S3',
+      'Obsidian',
+      'KOReader',
+      'OPDS Catalogs',
+      'Nearby BookDrop',
+    ]) {
+      expect(screen.getAllByText(title).length).toBeGreaterThan(0);
+    }
+    for (const title of [
+      'Google Drive',
+      'OneDrive',
+      'iCloud',
+      'Notion',
+      'Audiobookshelf',
+      'Readwise',
+      'Hardcover',
+      'Pagebound',
+      'BookOrbit',
+      'Grimmory',
+      'Send to Readest',
+    ]) {
+      expect(screen.queryByText(title)).toBeNull();
+    }
   });
 });
