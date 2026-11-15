@@ -672,6 +672,46 @@ flipping their master switches, which is P1.
   bridge component is not mounted.
 - **Status**: applied
 
+### P19 — Silence telemetry consent prompts and hide user-facing telemetry controls
+
+- **Target**: `apps/readest-app/src/components/Providers.tsx`,
+  `apps/readest-app/src/components/settings/ControlPanel.tsx`,
+  `apps/readest-app/src/services/commandRegistry.ts`, and
+  `apps/readest-app/src/components/command-palette/CommandPaletteProvider.tsx`
+- **Change**: simplify `finalizeTelemetryDecision` in `Providers.tsx` so any
+  profile whose recorded decision is not `'opt-out'` (`null`, stale `'pending'`,
+  or stale `'opt-in'`) is immediately opted out via `optOutTelemetry()`,
+  reconciled to `false`, and saved with `telemetryEnabled: false` when
+  `settings.telemetryEnabled` was `true`, without ever rolling into the 10%
+  prompt bucket or mounting `TelemetryConsentDialog`. Remove the `Privacy`
+  (`settings.control.telemetry`) switch block, `isTelemetryEnabled`, and
+  `toggleTelemetry` from `ControlPanel.tsx`, and remove `action.telemetry` and
+  `toggleTelemetry` wiring from `commandRegistry.ts` and
+  `CommandPaletteProvider.tsx` while leaving `utils/telemetry.ts`,
+  `types/settings.ts`, `TelemetryConsentDialog.tsx`, and locale files untouched.
+- **Effect**: fresh and migrated profiles on Web and Android record silent
+  `opt-out` on first boot with zero consent modals, and neither Settings →
+  Control nor the Command Palette exposes a dead "Help improve Readest" toggle
+  while PostHog stays disabled via **P5**.
+- **Why not configuration**: **P5** blanks `NEXT_PUBLIC_POSTHOG_KEY` so PostHog
+  never initializes, but `Providers.tsx` rolls new users into the consent dialog
+  bucket before checking PostHog configuration, and `ControlPanel.tsx` /
+  `commandRegistry.ts` render the toggle unconditionally.
+- **Tests**: `src/__tests__/utils/telemetry.test.ts` covers `<Providers>` boot
+  consent resolution across brand-new 10%-bucket users, stale `'pending'`
+  profiles, existing undecided profiles with `telemetryEnabled: true`, and stale
+  `'opt-in'` profiles; `src/__tests__/components/settings/ControlPanelUpdateReset.test.tsx`
+  asserts `Privacy` / `Help improve Readest` are hidden while `Security`
+  (`Allow JavaScript`) remains; `src/__tests__/services/command-registry-extended.test.ts`
+  asserts `action.telemetry` is omitted from built commands and search results.
+- **Conflict risk**: **low.** Self-contained removals across four UI/wiring
+  files.
+- **When it breaks**: upstream adds another non-telemetry row inside
+  `ControlPanel.tsx`'s `Privacy` `BoxedList` (in which case keep the `BoxedList`
+  and remove only the telemetry row) or reworks `finalizeTelemetryDecision` /
+  `commandRegistry.ts`.
+- **Status**: applied
+
 ---
 
 ## Part 3 — Resolved decisions

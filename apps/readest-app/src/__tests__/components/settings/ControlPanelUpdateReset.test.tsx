@@ -205,3 +205,12 @@ describe('Animation style options', () => {
     expect(styleSelect().value).toBe('curl');
   });
 });
+
+describe('Privacy telemetry control', () => {
+  it('hides the Privacy section and telemetry switch while keeping Security controls', () => {
+    render(<ControlPanel bookKey='' onRegisterReset={() => {}} />);
+    expect(screen.queryByRole('checkbox', { name: /^Help improve Readest/ })).toBeNull();
+    expect(screen.queryByText('Privacy')).toBeNull();
+    expect(screen.getByRole('checkbox', { name: /^Allow JavaScript/ })).toBeTruthy();
+  });
+});

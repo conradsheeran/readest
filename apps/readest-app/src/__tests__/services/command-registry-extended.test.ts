@@ -62,7 +62,6 @@ function createMockOptions(
     reloadPage: vi.fn(),
     toggleOpenLastBooks: vi.fn(),
     showAbout: vi.fn(),
-    toggleTelemetry: vi.fn(),
     isDesktop: false,
     ...overrides,
   };
@@ -99,7 +98,13 @@ describe('buildCommandRegistry', () => {
     expect(actionIds).toContain('action.fullscreen');
     expect(actionIds).toContain('action.reload');
     expect(actionIds).toContain('action.about');
-    expect(actionIds).toContain('action.telemetry');
+    expect(actionIds).not.toContain('action.telemetry');
+  });
+
+  it('should not expose telemetry toggle when searching commands', () => {
+    const items = buildCommandRegistry(createMockOptions());
+    const results = searchCommands('telemetry', items);
+    expect(results.some((r) => r.item.id === 'action.telemetry')).toBe(false);
   });
 
   it('should use the provided translation function for localized labels', () => {

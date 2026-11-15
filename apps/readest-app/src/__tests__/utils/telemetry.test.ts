@@ -1,4 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { createElement, Fragment, type ReactNode } from 'react';
+import type { SystemSettings } from '@/types/settings';
+import type { AppService } from '@/types/system';
 
 vi.mock('posthog-js', () => ({
   default: {
@@ -9,7 +13,94 @@ vi.mock('posthog-js', () => ({
   },
 }));
 
+const providerMocks = vi.hoisted(() => ({
+  exists: vi.fn<() => Promise<boolean>>().mockResolvedValue(false),
+  loadSettings: vi.fn<() => Promise<SystemSettings>>(),
+  saveSettings: vi.fn<(settings: SystemSettings) => Promise<void>>().mockResolvedValue(undefined),
+  initPostHog: vi.fn(),
+}));
+
+vi.mock('@/utils/polyfill', () => ({}));
+vi.mock('@/i18n/i18n', () => ({
+  default: { on: vi.fn(), off: vi.fn() },
+}));
+vi.mock('@/context/AuthContext', () => ({
+  AuthProvider: ({ children }: { children: ReactNode }) => createElement(Fragment, null, children),
+}));
+vi.mock('@/context/PHContext', () => ({
+  CSPostHogProvider: ({ children }: { children: ReactNode }) =>
+    createElement(Fragment, null, children),
+  initPostHog: () => providerMocks.initPostHog(),
+}));
+vi.mock('@/context/SyncContext', () => ({
+  SyncProvider: ({ children }: { children: ReactNode }) => createElement(Fragment, null, children),
+}));
+vi.mock('@/context/DropdownContext', () => ({
+  DropdownProvider: ({ children }: { children: ReactNode }) =>
+    createElement(Fragment, null, children),
+}));
+vi.mock('@/components/command-palette', () => ({
+  CommandPaletteProvider: ({ children }: { children: ReactNode }) =>
+    createElement(Fragment, null, children),
+  CommandPalette: () => null,
+}));
+vi.mock('@/components/WindowResizeHandles', () => ({ default: () => null }));
+vi.mock('@/components/WindowOutline', () => ({ default: () => null }));
+vi.mock('@/components/AtmosphereOverlay', () => ({ default: () => null }));
+vi.mock('@/components/AppLockScreen', () => ({ default: () => null }));
+vi.mock('@/components/settings/AppLockDialog', () => ({ default: () => null }));
+vi.mock('@/components/PassphrasePrompt', () => ({ default: () => null }));
+vi.mock('@/components/TelemetryConsentDialog', () => ({
+  default: ({ open }: { open: boolean }) =>
+    open ? createElement('div', { 'data-testid': 'telemetry-consent-dialog' }) : null,
+}));
+vi.mock('@/store/themeStore', () => ({
+  initSystemThemeListener: vi.fn(),
+  loadDataTheme: vi.fn(),
+}));
+vi.mock('@/store/settingsStore', () => ({
+  useSettingsStore: () => ({ applyUILanguage: vi.fn() }),
+}));
+vi.mock('@/store/customTextureStore', () => ({
+  useCustomTextureStore: { getState: () => ({ setTextures: vi.fn() }) },
+}));
+vi.mock('@/store/appLockStore', () => ({
+  useAppLockStore: () => ({ isInitialized: true, isUnlocked: true, initialize: vi.fn() }),
+}));
+vi.mock('@/hooks/useSafeAreaInsets', () => ({ useSafeAreaInsets: vi.fn() }));
+vi.mock('@/hooks/useSettingsSync', () => ({ useSettingsSync: vi.fn() }));
+vi.mock('@/hooks/useResponsiveSize', () => ({ useDefaultIconSize: () => 16 }));
+vi.mock('@/hooks/useBackgroundTexture', () => ({
+  useBackgroundTexture: () => ({ applyBackgroundTexture: vi.fn() }),
+}));
+vi.mock('@/hooks/useEinkMode', () => ({
+  useEinkMode: () => ({ applyEinkMode: vi.fn() }),
+}));
+vi.mock('@/utils/misc', () => ({ getLocale: () => 'en', stubTranslation: (s: string) => s }));
+vi.mock('@/utils/rtl', () => ({ getDirFromUILanguage: () => 'ltr' }));
+vi.mock('@/utils/viewport', () => ({ getAndroidPatchedViewportContent: () => null }));
+vi.mock('@/helpers/settings', () => ({ getLibraryViewSettings: () => ({}) }));
+vi.mock('@/libs/crypto/passphrase', () => ({
+  upgradeToKeychainIfAvailable: vi.fn().mockResolvedValue(undefined),
+}));
+vi.mock('@/libs/crypto/session', () => ({
+  cryptoSession: { tryRestoreFromStore: vi.fn().mockResolvedValue(undefined) },
+}));
+vi.mock('@/services/sync/replicaSettingsSync', () => ({ initSettingsSync: vi.fn() }));
+vi.mock('@/context/EnvContext', () => ({
+  useEnv: () => ({
+    envConfig: {},
+    appService: {
+      exists: providerMocks.exists,
+      loadSettings: providerMocks.loadSettings,
+      saveSettings: providerMocks.saveSettings,
+    } as unknown as AppService,
+  }),
+}));
+
 import posthog from 'posthog-js';
+import Providers from '@/components/Providers';
+import { DEFAULT_SYSTEM_SETTINGS } from '@/services/constants';
 import {
   applyPostHogConsent,
   getTelemetryDecision,
@@ -184,5 +275,92 @@ describe('consent calls before PostHog starts', () => {
     expect(getTelemetryDecision()).toBe('opt-in');
     expect(posthog.opt_in_capturing).not.toHaveBeenCalled();
     expect(posthog.opt_out_capturing).not.toHaveBeenCalled();
+  });
+});
+
+describe('Providers boot telemetry consent', () => {
+  const makeSettings = (telemetryEnabled = true): SystemSettings =>
+    ({
+      ...DEFAULT_SYSTEM_SETTINGS,
+      globalViewSettings: {
+        uiLanguage: '',
+        isEink: false,
+      },
+      telemetryEnabled,
+    }) as SystemSettings;
+
+  beforeEach(() => {
+    localStorage.clear();
+    vi.clearAllMocks();
+    providerMocks.exists.mockResolvedValue(false);
+    providerMocks.saveSettings.mockResolvedValue(undefined);
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+  });
+
+  it('silently opts out a brand-new user without showing the consent prompt even when RNG rolls into the prompt bucket', async () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+    const settings = makeSettings(true);
+    providerMocks.exists.mockResolvedValue(false);
+    providerMocks.loadSettings.mockResolvedValue(settings);
+
+    render(createElement(Providers, null, createElement('div', { 'data-testid': 'app-child' })));
+
+    await waitFor(() => expect(providerMocks.initPostHog).toHaveBeenCalledOnce());
+    expect(screen.queryByTestId('telemetry-consent-dialog')).toBeNull();
+    expect(getTelemetryDecision()).toBe('opt-out');
+    expect(hasOptedOutTelemetry()).toBe(true);
+    expect(settings.telemetryEnabled).toBe(false);
+    expect(providerMocks.saveSettings).toHaveBeenCalledWith(settings);
+  });
+
+  it('silently opts out a stale pending profile without showing the consent prompt', async () => {
+    setTelemetryDecision('pending');
+    const settings = makeSettings(true);
+    providerMocks.exists.mockResolvedValue(true);
+    providerMocks.loadSettings.mockResolvedValue(settings);
+
+    render(createElement(Providers, null, createElement('div', { 'data-testid': 'app-child' })));
+
+    await waitFor(() => expect(providerMocks.initPostHog).toHaveBeenCalledOnce());
+    expect(screen.queryByTestId('telemetry-consent-dialog')).toBeNull();
+    expect(getTelemetryDecision()).toBe('opt-out');
+    expect(hasOptedOutTelemetry()).toBe(true);
+    expect(settings.telemetryEnabled).toBe(false);
+    expect(providerMocks.saveSettings).toHaveBeenCalledWith(settings);
+  });
+
+  it('opts out an existing user without a recorded decision even when telemetryEnabled was true', async () => {
+    const settings = makeSettings(true);
+    providerMocks.exists.mockResolvedValue(true);
+    providerMocks.loadSettings.mockResolvedValue(settings);
+
+    render(createElement(Providers, null, createElement('div', { 'data-testid': 'app-child' })));
+
+    await waitFor(() => expect(providerMocks.initPostHog).toHaveBeenCalledOnce());
+    expect(screen.queryByTestId('telemetry-consent-dialog')).toBeNull();
+    expect(getTelemetryDecision()).toBe('opt-out');
+    expect(hasOptedOutTelemetry()).toBe(true);
+    expect(settings.telemetryEnabled).toBe(false);
+    expect(providerMocks.saveSettings).toHaveBeenCalledWith(settings);
+  });
+
+  it('reconciles a stale opt-in decision back to opt-out', async () => {
+    optInTelemetry();
+    vi.clearAllMocks();
+    const settings = makeSettings(true);
+    providerMocks.exists.mockResolvedValue(true);
+    providerMocks.loadSettings.mockResolvedValue(settings);
+
+    render(createElement(Providers, null, createElement('div', { 'data-testid': 'app-child' })));
+
+    await waitFor(() => expect(providerMocks.initPostHog).toHaveBeenCalledOnce());
+    expect(getTelemetryDecision()).toBe('opt-out');
+    expect(hasOptedOutTelemetry()).toBe(true);
+    expect(settings.telemetryEnabled).toBe(false);
+    expect(providerMocks.saveSettings).toHaveBeenCalledWith(settings);
   });
 });
