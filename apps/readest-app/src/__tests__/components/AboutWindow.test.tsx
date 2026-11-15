@@ -64,16 +64,30 @@ vi.mock('next/image', () => ({
   default: ({ alt }: { alt: string }) => <span>{alt}</span>,
 }));
 
-vi.mock('@/components/SupportLinks', () => ({ default: () => null }));
-vi.mock('@/components/LegalLinks', () => ({ default: () => null }));
 vi.mock('@/components/Link', () => ({
-  default: ({ children }: { children: ReactNode }) => <span>{children}</span>,
+  default: ({
+    children,
+    href,
+    title,
+    'aria-label': ariaLabel,
+  }: {
+    children: ReactNode;
+    href: string;
+    title?: string;
+    'aria-label'?: string;
+  }) => (
+    <a href={href} title={title} aria-label={ariaLabel}>
+      {children}
+    </a>
+  ),
 }));
 vi.mock('@/components/Dialog', () => ({
   default: ({ children }: { children: ReactNode }) => <div>{children}</div>,
 }));
 
 import { AboutWindow, setAboutDialogVisible } from '@/components/AboutWindow';
+import SupportLinks from '@/components/SupportLinks';
+import LegalLinks from '@/components/LegalLinks';
 
 const openDialog = async () => {
   render(
@@ -169,5 +183,35 @@ describe('AboutWindow version label', () => {
 
     expect(screen.queryByText('Check Update')).toBeNull();
     expect(screen.queryByRole('button', { name: 'Check Update' })).toBeNull();
+  });
+
+  it('renders no support/community or legal external links while keeping version info', async () => {
+    const label = await openDialog();
+
+    expect(label.textContent).toContain('Version 0.11.20');
+    expect(screen.queryByText('Get Help from the Readest Community')).toBeNull();
+    expect(screen.queryByTitle('GitHub')).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Discord' })).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Reddit' })).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Terms of Service' })).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Privacy Policy' })).toBeNull();
+  });
+});
+
+describe('SupportLinks and LegalLinks stubs (P25)', () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  it('SupportLinks renders null', () => {
+    const { container } = render(<SupportLinks />);
+
+    expect(container.firstChild).toBeNull();
+  });
+
+  it('LegalLinks renders null', () => {
+    const { container } = render(<LegalLinks />);
+
+    expect(container.firstChild).toBeNull();
   });
 });

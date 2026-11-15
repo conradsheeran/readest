@@ -870,6 +870,36 @@ flipping their master switches, which is P1.
   entries.
 - **Status**: applied
 
+### P25 — Stub upstream Support/Legal link blocks and disable logged-out demo books
+
+- **Target**: `apps/readest-app/src/components/SupportLinks.tsx`,
+  `apps/readest-app/src/components/LegalLinks.tsx`, and
+  `apps/readest-app/src/app/library/hooks/useDemoBooks.ts`
+- **Change**: replace the bodies of `SupportLinks` and `LegalLinks` with `null`
+  (preserving their exported component signatures and props), and replace
+  `useDemoBooks` with a zero-side-effect stub returning a referentially stable
+  `EMPTY_DEMO_BOOKS: Book[] = []` constant.
+- **Effect**: neither the About dialog nor the User Profile view renders
+  outbound links to Readest's Discord, GitHub, feedback/translation pages, Terms
+  of Service, Privacy Policy, or Contact mailto, and opening the Web app while
+  signed out renders a clean empty bookshelf with zero requests to
+  `storage.readest.com/public/books/demo-books.json` or sample `.epub` files.
+- **Why not configuration**: `SupportLinks` and `LegalLinks` hardcode
+  `readest.com` / community URLs unconditionally, and `useDemoBooks` fetches
+  from `READEST_PUBLIC_STORAGE_BASE_URL` (`https://storage.readest.com/public`)
+  whenever `!user && appService?.isWebApp`.
+- **Tests**: `src/__tests__/components/AboutWindow.test.tsx` asserts version
+  rendering remains intact while Discord, GitHub, Terms of Service, and Privacy
+  Policy links are absent; `src/__tests__/app/library/demo-books-sync.test.tsx`
+  asserts `useDemoBooks` returns a stable `[]` and performs zero `fetch` or demo
+  download calls when logged out.
+- **Conflict risk**: **low.** Three tiny leaf files turned into minimal stubs
+  (same pattern as **P2** / **P3**).
+- **When it breaks**: upstream adds new props to `SupportLinks`, `LegalLinks`,
+  or `useDemoBooks` that callers pass. Update the stub parameter types to accept
+  them and continue returning `null` / `EMPTY_DEMO_BOOKS`.
+- **Status**: applied
+
 ---
 
 ## Part 3 — Resolved decisions

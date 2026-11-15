@@ -28,6 +28,23 @@ const appService = vi.hoisted(() => ({
   saveLibraryBooks: vi.fn(async () => {}),
   generateCoverImageUrl: vi.fn(async () => 'blob:cover'),
   downloadBookCovers: vi.fn(async () => {}),
+  importBook: vi.fn(async (url: string) => ({
+    format: 'EPUB' as const,
+    title: 'Demo Book',
+    author: 'Demo Author',
+    createdAt: 1000,
+    updatedAt: 1000,
+    hash: `hash:${url}`,
+    url,
+  })),
+}));
+
+const envConfig = vi.hoisted(() => ({
+  getAppService: vi.fn(async () => appService),
+}));
+
+const authState = vi.hoisted(() => ({
+  user: { id: 'user-1' } as { id: string } | null,
 }));
 
 const syncState = vi.hoisted(() => ({
@@ -38,11 +55,11 @@ const syncState = vi.hoisted(() => ({
 }));
 
 vi.mock('@/context/AuthContext', () => ({
-  useAuth: () => ({ user: { id: 'user-1' } }),
+  useAuth: () => authState,
 }));
 
 vi.mock('@/context/EnvContext', () => ({
-  useEnv: () => ({ envConfig: {}, appService }),
+  useEnv: () => ({ envConfig, appService }),
 }));
 
 vi.mock('@/context/SyncContext', () => ({
@@ -67,6 +84,7 @@ vi.mock('@/services/sync/file/runLibrarySync', () => ({
 }));
 
 const { useBooksSync } = await import('@/app/library/hooks/useBooksSync');
+const { useDemoBooks } = await import('@/app/library/hooks/useDemoBooks');
 const { useLibraryStore } = await import('@/store/libraryStore');
 
 const makeBook = (over: Partial<Book> & Pick<Book, 'hash'>): Book => ({
@@ -80,6 +98,7 @@ const makeBook = (over: Partial<Book> & Pick<Book, 'hash'>): Book => ({
 
 beforeEach(() => {
   vi.clearAllMocks();
+  authState.user = { id: 'user-1' };
   syncState.syncedBooks = null;
   useLibraryStore.setState({ library: [], libraryLoaded: false, isSyncing: false });
 });
@@ -148,5 +167,49 @@ describe('demo books and the cloud book channel (issue #5049)', () => {
     expect(coverRefreshed.map((book) => book.hash)).not.toContain('demo-1');
     // The user's own book still merges as before.
     expect(library.find((book) => book.hash === 'mine-1')?.updatedAt).toBe(3000);
+  });
+});
+
+describe('useDemoBooks self-hosted stub (P25)', () => {
+  it('returns an empty array for signed-out sessions and makes zero remote requests', async () => {
+    const previousPlatform = process.env['NEXT_PUBLIC_APP_PLATFORM'];
+    process.env['NEXT_PUBLIC_APP_PLATFORM'] = 'web';
+    authState.user = null;
+    const storage = new Map<string, string>();
+    const storageMock = {
+      getItem: vi.fn((key: string) => storage.get(key) ?? null),
+      setItem: vi.fn((key: string, value: string) => {
+        storage.set(key, value);
+      }),
+      removeItem: vi.fn((key: string) => {
+        storage.delete(key);
+      }),
+    };
+    vi.stubGlobal('localStorage', storageMock);
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+
+    try {
+      const { result, rerender } = renderHook(() => useDemoBooks());
+      await Promise.resolve();
+      await Promise.resolve();
+
+      const firstResult = result.current;
+      expect(firstResult).toEqual([]);
+      rerender();
+      expect(result.current).toBe(firstResult);
+
+      expect(envConfig.getAppService).not.toHaveBeenCalled();
+      expect(appService.importBook).not.toHaveBeenCalled();
+      expect(fetchSpy).not.toHaveBeenCalled();
+      expect(storageMock.setItem).not.toHaveBeenCalled();
+    } finally {
+      fetchSpy.mockRestore();
+      vi.unstubAllGlobals();
+      if (previousPlatform === undefined) {
+        delete process.env['NEXT_PUBLIC_APP_PLATFORM'];
+      } else {
+        process.env['NEXT_PUBLIC_APP_PLATFORM'] = previousPlatform;
+      }
+    }
   });
 });
