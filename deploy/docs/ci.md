@@ -42,12 +42,13 @@ than curating a list.
 
 **Triggers**: `workflow_dispatch`, `release: published`.
 
-Not on `push`. This is the most expensive job here — around an hour — and
-building it on every commit to `main` is waste.
+Not on `push`. This is the most expensive job here, and building it on every
+commit to `main` is waste.
 
-**Does**: what `android.md` documents, in order — toolchain setup, write
-`.env.local`, `tauri android init`, reconstitute the keystore from secrets,
-build, attach the APKs to the release.
+**Does**: what `android.md` documents, in order — toolchain setup for
+`aarch64-linux-android`, write `.env.local`, `tauri android init`, reconstitute
+the keystore from secrets, build the single `arm64` APK with
+`ORG_GRADLE_PROJECT_penFlavor=booxPen`, attach the APK to the release.
 
 **Signing secrets**: `ANDROID_KEY_BASE64`, `ANDROID_KEY_ALIAS`,
 `ANDROID_KEY_PASSWORD`. The keystore is written to `$RUNNER_TEMP`, never into
@@ -69,8 +70,9 @@ written as `NEXT_PUBLIC_*` build inputs.
 updater flag makes `hasUpdater` false, so Settings → Control does not render the
 dead "Check Updates on Start" and "Nightly Builds" switches.
 
-**Artifacts**: `Readest_<version>_universal.apk` and
-`Readest_<version>_arm64.apk`, uploaded to the GitHub release.
+**Artifacts**: `Readest_<version>_arm64.apk`, built for `aarch64-linux-android`
+with `ORG_GRADLE_PROJECT_penFlavor=booxPen`, uploaded to the GitHub release and
+retained as the `apk-<version>` workflow artifact for 7 days.
 
 ## Pulling the image on the host
 

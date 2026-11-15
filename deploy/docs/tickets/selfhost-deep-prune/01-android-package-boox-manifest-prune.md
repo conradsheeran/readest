@@ -1,0 +1,15 @@
+# 01: Isolate Android selfhost package, enable BOOX stylus by default, and prune manifest/deep-links (P17)
+
+**What to build:** Deliver an isolated Android `selfhost release` package configuration (`P17`) that installs side by side with the official Readest APK under application ID `com.bilingify.readest.selfhost` while keeping the launcher title `Readest`, compiles with `booxPen` and `foss` flavors enabled by default across both the Android application module and the native-bridge plugin module (providing low-latency Onyx Pen SDK raw drawing on BOOX EMR E-ink devices and automatic runtime fallback to pointer events on standard Android phones), and strips unused commercial/TV permissions and official deep-link schemes without breaking LAN cleartext HTTP, storage access, widgets, or third-party dictionary/Anki integrations.
+
+**Blocked by:** None (can start immediately)
+
+**Status:** completed
+
+- [x] Default Android `applicationId` is `com.bilingify.readest.selfhost` with support for overriding via a Gradle project property or environment variable, while Android `namespace` (`com.bilingify.readest`), Tauri bundle identifier, and launcher display label (`Readest`) remain unchanged.
+- [x] `penFlavor` defaults to `booxPen` (unless explicitly overridden to `genericPen`) across every `penFlavor` check in both the Android app Gradle build and the native-bridge Android plugin Gradle build — activating the missing-dimension strategy, the BOOX Maven repository declaration in both modules, the `libc++_shared` packaging deduplication rule, and the pre-stripped `libneo_pen` / `libc++` exclusions during NDK symbol stripping — while `storeFlavor` remains defaulted to `foss`.
+- [x] `android.permission.REQUEST_INSTALL_PACKAGES`, `com.android.vending.BILLING`, the `android.software.leanback` feature, and the `android.intent.category.LEANBACK_LAUNCHER` category are removed from the Android manifest.
+- [x] The `https://web.readest.com` (`autoVerify="true"`) App Link, the Google Drive reverse-DNS OAuth redirect scheme, and the `readest-onedrive` OAuth redirect scheme are removed from both the Android manifest (manual and deep-link plugin blocks) and the Tauri mobile deep-link configuration, while the `readest` auth scheme, ebook file/MIME associations, and `SEND` / `SEND_MULTIPLE` share-in intent filters remain intact.
+- [x] `usesCleartextTraffic="true"`, `MANAGE_EXTERNAL_STORAGE`, dynamic `${applicationId}.fileprovider` authority binding, home-screen widget receivers, and native-bridge `PROCESS_TEXT` / `com.ichi2.anki` `<queries>` remain intact.
+- [x] Test-first assertions at the Android Native Declarations Vitest seam fail before the change and pass after it; `pnpm test` and `pnpm lint` pass with zero dependency, lockfile, or locale churn (no `.rs` files modified; local `cargo` workspace checks blocked only by uninitialized `tauri-plugin-webview-upgrade` submodule).
+- [x] Committed atomically as `patch(P17)` with `P17` registered as `applied` in the `patch ledger` in the same commit.

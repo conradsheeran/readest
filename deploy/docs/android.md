@@ -70,6 +70,59 @@ Deliberately **not** set:
 invalidates every installed app, and requires rebuilding and redistributing.
 Treat it as long-lived.
 
+## Package identity, stylus support, and manifest
+
+### Isolated application ID and coexistence (`P17`)
+
+By default, the Android app module (`apps/readest-app/src-tauri/gen/android/app/build.gradle.kts`)
+sets `applicationId = "com.bilingify.readest.selfhost"` (overridable via
+`-PapplicationId=...` or `ANDROID_APPLICATION_ID`), while keeping the launcher
+display name `Readest` (`productName` in `tauri.conf.json`) and Kotlin/JNI
+`namespace = "com.bilingify.readest"`. The local Android CDP e2e runner
+(`pnpm test:android`, via `scripts/test-android.sh` and
+`src/__tests__/android/helpers/reader.ts`) also defaults to
+`com.bilingify.readest.selfhost` and honors `ANDROID_APPLICATION_ID`. Android FileProvider authorities bind
+dynamically via `${applicationId}.fileprovider` and home-screen widgets resolve
+against the installed package name, so the self-hosted APK installs side by
+side with official `com.bilingify.readest` releases without package or
+signature collisions.
+
+**First-install migration note:** Earlier self-hosted APKs built under
+`com.bilingify.readest` are treated by Android as a separate application from
+`com.bilingify.readest.selfhost`. Install the new APK once, sign into your
+server to pull books, annotations, and reading progress via `Readest Cloud`
+sync (or re-import locally), and then uninstall the legacy
+`com.bilingify.readest` build (or replace it with the official app). Keep
+signing `com.bilingify.readest.selfhost` with the same keystore for all
+subsequent upgrades.
+
+### Default BOOX stylus support (`P17`)
+
+Both the app Gradle build and `tauri-plugin-native-bridge` default
+`penFlavor` to `"booxPen"` (with `ORG_GRADLE_PROJECT_penFlavor=booxPen` also
+exported in CI as defense-in-depth, and overridable via `-PpenFlavor=genericPen`
+or `ORG_GRADLE_PROJECT_penFlavor=genericPen`; `storeFlavor` remains `"foss"`).
+Onyx BOOX E-ink readers receive low-latency hardware EMR stylus stroke
+rendering through the Onyx Pen SDK. On standard Android phones, the native
+bridge checks hardware capabilities at runtime (manufacturer/brand, EMR
+digitizer presence, and a `try/catch`-guarded `EpdController.getMaxTouchPressure()`
+probe) and falls back cleanly to standard browser pointer events.
+
+### Manifest and Android Auto pruning (`P17`, `P18`)
+
+- **Pruned by `P17`:** Removes `REQUEST_INSTALL_PACKAGES` and
+  `com.android.vending.BILLING`, Android TV Leanback feature/launcher entries,
+  the `https://web.readest.com` App Link (`autoVerify`), and Google Drive /
+  OneDrive OAuth redirect schemes from the Android manifest and Tauri mobile
+  deep-link config (leaving desktop deep-link schemes untouched). Retains `readest://` auth callbacks, `usesCleartextTraffic="true"` for
+  LAN servers, `MANAGE_EXTERNAL_STORAGE`, `${applicationId}.fileprovider`, ebook
+  `VIEW` filters, `SEND`/`SEND_MULTIPLE` share targets, and third-party
+  dictionary/`AnkiDroid` queries.
+- **Disabled by `P18`:** Resolves `carAppMetaName` unconditionally to
+  `com.bilingify.readest.androidauto.withheld` across all store flavors and
+  unmounts `CarMediaLibraryBridge` from the root React providers tree, disabling
+  Android Auto.
+
 ## Toolchain
 
 Taken from upstream's own release workflow at `v0.12.1`. These versions are not
@@ -81,7 +134,7 @@ arbitrary — the NDK version in particular must match what Tauri expects.
 | Android SDK | via `android-actions/setup-android` |
 | NDK | `28.2.13676358` |
 | Node | 24 |
-| Rust targets | `aarch64-linux-android`, `armv7-linux-androideabi`, `i686-linux-android`, `x86_64-linux-android` |
+| Rust target | `aarch64-linux-android` |
 
 `NDK_HOME` must be set to `$ANDROID_HOME/ndk/28.2.13676358`.
 
@@ -101,7 +154,7 @@ git checkout .            # tauri android init rewrites tracked files; discard t
 `tauri android init` regenerates the Gradle project from scratch every build,
 which is why the keystore configuration below is written *after* it and not
 committed. The `git checkout .` afterwards is upstream's own step: `init` and
-`icon` modify tracked files, and those changes are not wanted.
+`icon` change tracked files, and those changes are not wanted.
 
 Then signing configuration and the build:
 
@@ -114,13 +167,14 @@ storeFile=$RUNNER_TEMP/keystore.jks
 CONF
 popd
 
-pnpm tauri android build              # universal APK
-pnpm tauri android build -t aarch64   # arm64-only APK
+ORG_GRADLE_PROJECT_penFlavor=booxPen pnpm tauri android build -t aarch64
 ```
 
-Both land in
-`src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release.apk`
-— the second build overwrites the first, so copy the artifact out between runs.
+Gradle writes the signed APK to
+`src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release.apk`,
+which CI renames to `Readest_<version>_arm64.apk`. (`penFlavor` also defaults to
+`booxPen` in Gradle; setting `ORG_GRADLE_PROJECT_penFlavor=booxPen` in the
+environment ensures that choice stays explicit even across future rebases.)
 
 ## Signing
 
@@ -156,18 +210,20 @@ reconstituted from the secret inside a workflow run.
 
 ## Cost
 
-Four Rust targets plus two Gradle builds is the slowest job in this repository —
-budget around an hour. It is worth building the arm64-only variant separately
-only if that reduction matters; otherwise the universal APK covers every device.
+Android remains the slowest job in this repository, though compiling only the
+`aarch64-linux-android` Rust target and a single `arm64` APK drops the
+redundant 32-bit ARM, x86, and universal Gradle builds while covering both
+modern Android phones and BOOX E-ink devices.
 
 ## Known gaps
 
-Anything under "Open decisions" in the patch ledger that touches the app affects
-the APK too. The in-app updater is the notable closed one: P9 makes the update
-check a no-op, and P12 retires the About dialog's update button and the startup
-release-notes fetch. `NEXT_PUBLIC_DISABLE_UPDATER=true` is baked into the APK as
-well, which sets `hasUpdater` to `false` and hides the Settings → Control
-"Check Updates on Start" and "Nightly Builds" toggles instead of leaving them to
-do nothing. An installed APK therefore does not offer **official** Readest
-builds and cannot update itself into the stock app. There is no in-app update
-path; ship and install a new APK.
+Anything under "Open decisions" in the patch ledger or in `known-limitations.md`
+that touches the app affects the APK too. The in-app updater is the notable
+closed one: P9 makes the update check a no-op, and P12 retires the About
+dialog's update button and the startup release-notes fetch.
+`NEXT_PUBLIC_DISABLE_UPDATER=true` is baked into the APK as well, which sets
+`hasUpdater` to `false` and hides the Settings → Control "Check Updates on
+Start" and "Nightly Builds" toggles instead of leaving them to do nothing. An
+installed APK therefore does not offer **official** Readest builds and cannot
+update itself into the stock app. There is no in-app update path; ship and
+install a new APK.

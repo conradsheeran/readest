@@ -18,7 +18,9 @@ that variable, so the bucket name is empty; and the returned URL points at
 Readest's CDN, which will never hold our object.
 
 Affects publishing a book cover — share links and the Discord Rich Presence
-cover. Tracked as ledger **O2**.
+cover. `Share Book` (`P21`) and `Discord Rich Presence` (`P23`) are now removed
+from the client UI, though the underlying `pages/api/storage/upload.ts` media
+branch remains tracked as ledger **O2**.
 
 ### The in-app updater is disabled
 
@@ -62,8 +64,11 @@ operates, and no amount of patching makes them work here.
 
 | Feature | Why it cannot work |
 | --- | --- |
-| Send to Readest via a personal email address | Depends on inbound email for `readest.com` and a Cloudflare Worker that bounces non-subscribers. The other Send channels — the in-app `/send` page, the mobile share sheet, the browser extension — are unaffected |
-| Subscriptions, in-app purchases | Stripe and the Apple/Google billing accounts are Readest's. The entry points are removed by ledger P2 and P3 |
+| Send to Readest via a personal email address | Depends on inbound email for `readest.com` and a Cloudflare Worker that bounces non-subscribers (UI row hidden by **P13**). The other Send channels — the in-app `/send` page, the mobile share sheet, the browser extension — are unaffected |
+| Subscriptions, in-app purchases | Stripe and the Apple/Google billing accounts are Readest's. Entry points and Play Billing permissions are removed by **P2**, **P3**, **P4**, and **P17** |
+| Readest Voice cloud TTS | Official cloud TTS service operated by Readest; disabled by **P22** so no `/tts/readest` warmup or synthesis calls run |
+| Public `Share Book` links (`web.readest.com`) | Requires Readest's public share host and CDN media bucket (**O2**); hidden across Reader, Bookshelf, and Book Detail menus by **P21** |
+| OAuth login (`Google`, `Apple`, `GitHub`, `Discord`) | Self-hosted GoTrue is configured for email + password with the `email allowlist`; OAuth buttons are hidden by **P20** |
 | Crash reporting | Deliberately off. Sentry needs a DSN we do not set |
 
 ## Consequences of our own decisions
@@ -99,3 +104,28 @@ upgrade runbook's step 3 reading.
 `utils/s3.ts` hardcodes `forcePathStyle: true`. R2 and MinIO are fine. A provider
 that mandates virtual-hosted-style would need a patch that no ledger entry
 covers.
+
+### Pruned vs. active client surfaces (`P17`–`P25`)
+
+To keep the Web UI and Android APK free of broken commercial, social, and
+upstream-hosted entry points without changing persisted settings schemas or
+server routes, `P17`–`P25` prune the following client surfaces while leaving the
+self-hosted core active:
+
+- **Kept & active:** Email + password authentication (`P20` hides OAuth
+  buttons); 7 integrations (`Readest Cloud`, `WebDAV`, `S3`, `Obsidian`,
+  `KOReader Sync`, `OPDS Catalogs`, and `Nearby BookDrop`); `From Local File`,
+  `From Directory`, `From Pasted Text`, and `OPDS Catalogs` imports; System TTS,
+  Edge TTS, and Custom OpenAI-compatible TTS (`P22` disables `Readest Voice`);
+  built-in, `P6` DeepLX, and Custom LLM text translation; and OS-level `Send`,
+  `Export Book`, and `Save Book Cover`.
+- **Pruned / disabled (`P17`–`P25`):** `Readest Voice` cloud TTS (`P22`);
+  `Share Book` public web links (`P21`); OAuth login buttons (`Google`, `Apple`,
+  `GitHub`, `Discord`, `P20`); 11 third-party/social/desktop integrations
+  (`Google Drive`, `OneDrive`, `iCloud`, `Notion`, `Audiobookshelf`, `Readwise`,
+  `Hardcover`, `Pagebound`, `BookOrbit`, `Grimmory`, and `Discord Rich Presence`,
+  `P23`); `From Web Browser`, `From Web Novel`, and `From Feed URL` import items
+  (`P24`); telemetry consent modal and toggles (`P19`); upstream Support/Legal
+  link blocks and logged-out `storage.readest.com` demo books (`P25`); Android
+  Auto (`P18`); and Android 32-bit/x86/TV/OTA-install/Play-Billing/App-Link
+  declarations (`P17` plus single-`arm64` CI).
