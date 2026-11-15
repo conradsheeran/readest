@@ -123,8 +123,8 @@ describe('library context menu on Linux desktop (issue #5360)', () => {
 
     openContextMenu();
 
-    // The downloaded, never-uploaded, statusless test book resolves to this
-    // ordered id list via getBookContextMenuItemIds.
+    // The downloaded, never-uploaded, statusless test book resolves to the
+    // ordered id list via getBookContextMenuItemIds, with Share Book pruned.
     const labels = [
       'Select Book',
       'Group Books',
@@ -134,11 +134,11 @@ describe('library context menu on Linux desktop (issue #5360)', () => {
       'Reveal in Folder',
       'Search on Goodreads',
       'Upload Book',
-      'Share Book',
       'Delete',
     ];
     const menuItems = await screen.findAllByRole('menuitem');
     expect(menuItems.map((el) => el.textContent)).toEqual(labels);
+    expect(screen.queryByRole('menuitem', { name: 'Share Book' })).toBeNull();
 
     expect(menuNew).not.toHaveBeenCalled();
     expect(popupSpy).not.toHaveBeenCalled();

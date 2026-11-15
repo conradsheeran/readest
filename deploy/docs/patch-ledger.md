@@ -739,6 +739,40 @@ flipping their master switches, which is P1.
   `AuthPanelProps`.
 - **Status**: applied
 
+### P21 — Remove Share Book across Reader, Bookshelf, and Book Detail surfaces
+
+- **Target**: `apps/readest-app/src/app/reader/components/ViewMenu.tsx`,
+  `apps/readest-app/src/app/library/components/BookshelfItem.tsx`, and
+  `apps/readest-app/src/components/metadata/BookDetailView.tsx`
+- **Change**: remove the `Share Book` menu item, its trailing divider, the
+  `handleShare` handler, and the `getProgress` destructuring from
+  `ViewMenu.tsx`; remove the `'share'` entry in `itemOptions` and filter it out
+  via `.filter((id) => id !== 'share')` in `BookshelfItem.tsx`; and remove the
+  `Share Book` action button in `BookDetailView.tsx` while keeping
+  `shareEnabled` and `onShare` optional on `BookDetailViewProps` so
+  `BookDetailModal.tsx` (including its `handleShare` handler) compiles
+  untouched. Leave `src/app/library/components/ShareBookDialog.tsx`, OS-level
+  `Send`, `Export Book`, and `Save Book Cover` untouched.
+- **Effect**: readers never hit a `Share Book` action that generates dead
+  `web.readest.com` public links or broken `assets.readest.com` cover uploads
+  (ledger **O2**), while local file export, cover saving, and native Android/OS
+  `Send` sharing continue working.
+- **Why not configuration**: all three surfaces render `Share Book`
+  unconditionally (`shareEnabled` defaults to `true` in `BookDetailModal` and
+  neither `ViewMenu` nor `BookshelfItem` checks a flag).
+- **Tests**: `src/__tests__/components/ViewMenu.test.tsx`,
+  `src/__tests__/app/library/book-context-menu-linux-inapp.test.tsx`, and
+  `src/__tests__/components/BookDetailView.test.tsx` assert `Share Book` is
+  absent across all three surfaces while font/layout controls, `Send`, and
+  `Save Book Cover` remain rendered.
+- **Conflict risk**: **low.** Small, localized item removals in three UI
+  components.
+- **When it breaks**: upstream adds a fourth `Share Book` entry point (for
+  example in the Command Palette or selection toolbar) or reworks one of the
+  three menus. Re-apply by hiding the `Share Book` UI trigger while preserving
+  OS `Send` and local export.
+- **Status**: applied
+
 ---
 
 ## Part 3 — Resolved decisions

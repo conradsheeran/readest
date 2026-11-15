@@ -171,7 +171,7 @@ const BookshelfItem: React.FC<BookshelfItemProps> = ({
     // in a single Menu.new({ items }) call. Appending items one-by-one with
     // un-awaited Menu.append() promises races on the Tauri IPC boundary and
     // shuffles the order on every open (issue #4389).
-    const itemOptions: Record<BookContextMenuItemId, BookContextMenuItem> = {
+    const itemOptions: Record<Exclude<BookContextMenuItemId, 'share'>, BookContextMenuItem> = {
       select: {
         text: itemSelected ? _('Deselect Book') : _('Select Book'),
         action: async () => {
@@ -244,14 +244,6 @@ const BookshelfItem: React.FC<BookshelfItemProps> = ({
           handleBookUpload(book);
         },
       },
-      share: {
-        text: _('Share Book'),
-        action: async () => {
-          // Bookshelf.tsx hosts the dialog; we dispatch and let it route
-          // unauthenticated users into the login flow first.
-          eventDispatcher.dispatch('show-share-dialog', { book });
-        },
-      },
       offlineDownload: {
         text: _('Download for Offline'),
         action: async () => {
@@ -282,7 +274,9 @@ const BookshelfItem: React.FC<BookshelfItemProps> = ({
     return getBookContextMenuItemIds(book, {
       localSend: isTauriAppPlatform() && isLocalSendEnabled(),
       absOffline: isTauriAppPlatform(),
-    }).map((id) => itemOptions[id]);
+    })
+      .filter((id): id is Exclude<BookContextMenuItemId, 'share'> => id !== 'share')
+      .map((id) => itemOptions[id]);
   };
 
   const buildGroupMenuItems = (group: BooksGroup): BookContextMenuItem[] => {

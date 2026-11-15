@@ -349,4 +349,25 @@ describe('ViewMenu layout', () => {
     ]);
     expect(seq[autoScroll + 5]).toBe('Sign in to Sync');
   });
+
+  it('omits Share Book and its trailing divider while preserving reading layout controls', () => {
+    render(<ViewMenu bookKey='book-1' />);
+    expect(screen.queryByRole('menuitem', { name: 'Share Book' })).toBeNull();
+    expect(screen.queryByText('Share Book')).toBeNull();
+    expect(screen.getByTitle('Single Page')).toBeTruthy();
+    expect(screen.getByTitle('Auto Spread')).toBeTruthy();
+    expect(screen.getByTitle('Vertical Scrolling')).toBeTruthy();
+    expect(screen.getByTitle('Horizontal Scrolling')).toBeTruthy();
+    const seq = menuSequence();
+    expect(seq[seq.length - 1]).toBe('Settings');
+
+    cleanup();
+    mockBookData.isFixedLayout = false;
+    mockBookData.bookDoc.rendition = { layout: 'reflowable' };
+    render(<ViewMenu bookKey='book-1' />);
+    expect(screen.queryByRole('menuitem', { name: 'Share Book' })).toBeNull();
+    expect(screen.getByRole('menuitem', { name: /Scrolled Mode/ })).toBeTruthy();
+    expect(screen.getByRole('menuitem', { name: /Paragraph Mode/ })).toBeTruthy();
+    expect(screen.getByRole('menuitem', { name: /Speed Reading Mode/ })).toBeTruthy();
+  });
 });
