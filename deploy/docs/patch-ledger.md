@@ -104,9 +104,9 @@ flipping their master switches, which is P1.
   it mocks `isSelfHosted()` directly. Reconciled after the v0.12.20 sweep:
   `LangPanel.test.tsx` and `TTSPanel.test.tsx` stub `SELF_HOSTED=false` /
   `NEXT_PUBLIC_SELF_HOSTED=false` to exercise upstream's custom-translator and
-  custom-TTS paywall; `readest-voice-catalog.test.ts` (plan filtering) and
-  `tts-readest-provider.test.ts` (plan-greyed voices) stub both for the same
-  reason. `useLibraryRefresh.test.tsx`, `TransferQueuePanel.test.tsx`,
+  custom-TTS paywall; `readest-voice-catalog.test.ts` (plan filtering) stubs
+  both for the same reason (`tts-readest-provider.test.ts` is now superseded by
+  **P22**). `useLibraryRefresh.test.tsx`, `TransferQueuePanel.test.tsx`,
   `runLibrarySync.test.ts`, and `VocabularyView.test.tsx` now assert the
   unlocked cloud-sync and Anki behavior instead of the paused/upgrade path.
 - **Conflict risk**: **low.** Boolean literals and one small function in a
@@ -771,6 +771,44 @@ flipping their master switches, which is P1.
   example in the Command Palette or selection toolbar) or reworks one of the
   three menus. Re-apply by hiding the `Share Book` UI trigger while preserving
   OS `Send` and local export.
+- **Status**: applied
+
+### P22 — Disable the official Readest Voice cloud TTS provider
+
+- **Target**: `apps/readest-app/src/services/tts/providers/readest.ts`
+- **Change**: short-circuit `ReadestVoiceProvider` and `fetchReadestVoicePreview`
+  to local unavailable/no-op responses while preserving every exported class,
+  property, and helper signature (`id`, `label`, `cacheable`,
+  `sameLanguageVoicesOnly`, `compareVoices`). `init()` resolves to `false`,
+  `getAllVoices()` resolves to `[]` (ignoring any cached
+  `readest-voice-catalog` entry in `localStorage`), `warmup()`, `prefetch()`,
+  `fulfill()`, and `shutdown()` no-op, and `synthesize()` plus
+  `fetchReadestVoicePreview()` fail fast with `SpeechSynthesisPermanentError`
+  without issuing any network requests.
+- **Effect**: opening TTS settings, the voice library, or the Read Aloud player
+  sheet never calls `/tts/readest`, `/tts/readest/stream`, or
+  `/tts/readest/jobs` and never renders a `Readest Voice` group (`voiceLibrary`,
+  `TTSController`, and `VoiceList` omit empty voice groups automatically),
+  leaving System TTS (Web Speech / native Android TTS), Edge TTS, and Custom
+  OpenAI-compatible TTS as the active engines while leaving all text translation
+  providers untouched.
+- **Why not configuration**: **P1** unlocked `isTTSInPlan()` on self-hosted
+  builds, and `ReadestVoiceProvider` unconditionally fetches the upstream voice
+  catalog (or serves stale `localStorage` entries) with no disable flag despite
+  no self-hosted `/tts/readest` synthesis backend existing.
+- **Tests**: `src/__tests__/services/tts-readest-provider.test.ts` verifies
+  `init() -> false`, `getAllVoices() -> []`, zero `fetch` / `fetchWithAuth`
+  calls across `warmup` / `prefetch` / `synthesize` /
+  `fetchReadestVoicePreview`, and uninitialized `BufferedTTSClient`;
+  `src/__tests__/services/tts-voice-library.test.ts` exercises the real
+  `ReadestVoiceProvider` via `loadVoiceLibrary()` and asserts `readest-tts` is
+  omitted with zero network requests while Custom OpenAI, Edge, and System
+  voices remain available.
+- **Conflict risk**: **low.** Self-contained inside `providers/readest.ts` with
+  zero caller or server-route edits.
+- **When it breaks**: upstream adds a new `SpeechProvider` method or symbol
+  imported from `providers/readest.ts`. Re-apply by keeping exported types
+  compatible and returning `false` / `[]` / no-op with zero network calls.
 - **Status**: applied
 
 ---
