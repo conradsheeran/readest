@@ -845,6 +845,31 @@ flipping their master switches, which is P1.
   adopted.
 - **Status**: applied
 
+### P24 — Slim Library Import menu to local and OPDS sources
+
+- **Target**: `apps/readest-app/src/app/library/components/ImportMenu.tsx`
+- **Change**: remove the `From Web Browser`, `From Web Novel`, and
+  `From Feed URL` menu items and their orphaned icons while keeping optional
+  callback props on `ImportMenuProps` (prefixed with `_` where unused) so
+  `LibraryHeader.tsx` and `ImportModal` callers compile untouched. Retain
+  `From Local File`, `From Directory`, `From Pasted Text`, and `Online Library`
+  (`OPDS Catalogs`).
+- **Effect**: the `+` import popup exposes only reliable local file/folder/text
+  and OPDS catalog import workflows without experimental web-novel scrapers,
+  in-app browser importers, or RSS feed fetchers.
+- **Why not configuration**: `ImportMenu.tsx` renders those items solely based
+  on platform capability booleans (`hasWebBrowser`, etc.), with no feature flag.
+- **Tests**: `src/__tests__/app/library/import-menu-popup.test.tsx` asserts
+  `From Local File`, `From Directory`, `From Pasted Text`, and `Online Library`
+  render and trigger callbacks while `From Web Browser`, `From Web Novel`, and
+  `From Feed URL` are absent.
+- **Conflict risk**: **low.** Single small menu component.
+- **When it breaks**: upstream adds a new scraper/importer item to
+  `ImportMenu.tsx` or changes `ImportMenuProps`. Keep `ImportMenuProps`
+  type-compatible with `LibraryHeader.tsx` and expose only local + OPDS import
+  entries.
+- **Status**: applied
+
 ---
 
 ## Part 3 — Resolved decisions

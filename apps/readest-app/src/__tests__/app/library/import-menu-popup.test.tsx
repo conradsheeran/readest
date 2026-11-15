@@ -40,35 +40,53 @@ afterEach(() => {
 });
 
 describe('ImportMenuPopup', () => {
-  it('shows the same always-available options as the library header menu', () => {
+  it('shows only local and catalog options and hides pruned web/feed sources', () => {
     renderPopup();
 
     expect(screen.getByRole('menuitem', { name: 'From Local File' })).toBeTruthy();
-    expect(screen.getByRole('menuitem', { name: 'From Feed URL' })).toBeTruthy();
     expect(screen.getByRole('menuitem', { name: 'Online Library' })).toBeTruthy();
     expect(screen.queryByRole('menuitem', { name: 'From Directory' })).toBeNull();
+    expect(screen.queryByRole('menuitem', { name: 'From Feed URL' })).toBeNull();
     expect(screen.queryByRole('menuitem', { name: 'From Web Browser' })).toBeNull();
+    expect(screen.queryByRole('menuitem', { name: 'From Web Novel' })).toBeNull();
   });
 
-  it('adds the platform-dependent options when their callbacks are available', () => {
+  it('adds supported platform options while keeping pruned sources hidden even when callbacks are passed', () => {
     const onImportBooksFromDirectory = vi.fn();
     const onImportFromWebBrowser = vi.fn();
-    const { onClose } = renderPopup({ onImportBooksFromDirectory, onImportFromWebBrowser });
+    const onImportBookFromNovelUrl = vi.fn();
+    const { onClose } = renderPopup({
+      onImportBooksFromDirectory,
+      onImportFromWebBrowser,
+      onImportBookFromNovelUrl,
+    });
 
     fireEvent.click(screen.getByRole('menuitem', { name: 'From Directory' }));
     expect(onImportBooksFromDirectory).toHaveBeenCalledTimes(1);
+    expect(onClose).toHaveBeenCalledTimes(1);
 
-    fireEvent.click(screen.getByRole('menuitem', { name: 'From Web Browser' }));
-    expect(onImportFromWebBrowser).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('menuitem', { name: 'From Web Browser' })).toBeNull();
+    expect(screen.queryByRole('menuitem', { name: 'From Web Novel' })).toBeNull();
+    expect(screen.queryByRole('menuitem', { name: 'From Feed URL' })).toBeNull();
     expect(screen.queryByRole('menuitem', { name: 'From Web URL' })).toBeNull();
-    expect(onClose).toHaveBeenCalledTimes(2);
   });
 
   it('uses the OPDS label when curated online catalogs are unavailable', () => {
     useEnvMock.mockReturnValue({ appService: { isOnlineCatalogsAccessible: false } });
-    renderPopup();
+    renderPopup({
+      onImportBooksFromDirectory: vi.fn(),
+      onImportPastedText: vi.fn(),
+      onImportFromWebBrowser: vi.fn(),
+      onImportBookFromNovelUrl: vi.fn(),
+    });
 
+    expect(screen.getByRole('menuitem', { name: 'From Local File' })).toBeTruthy();
+    expect(screen.getByRole('menuitem', { name: 'From Directory' })).toBeTruthy();
+    expect(screen.getByRole('menuitem', { name: 'From Pasted Text' })).toBeTruthy();
     expect(screen.getByRole('menuitem', { name: 'OPDS Catalogs' })).toBeTruthy();
+    expect(screen.queryByRole('menuitem', { name: 'From Feed URL' })).toBeNull();
+    expect(screen.queryByRole('menuitem', { name: 'From Web Browser' })).toBeNull();
+    expect(screen.queryByRole('menuitem', { name: 'From Web Novel' })).toBeNull();
   });
 
   it('runs the selected action and dismisses the popup', () => {
