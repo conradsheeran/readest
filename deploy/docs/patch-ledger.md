@@ -712,6 +712,33 @@ flipping their master switches, which is P1.
   `commandRegistry.ts`.
 - **Status**: applied
 
+### P20 — Restrict authentication UI to email and password
+
+- **Target**: `apps/readest-app/src/app/auth/components/AuthPanel.tsx`
+- **Change**: remove the `Google`, `Apple`, `GitHub`, and `Discord`
+  `<ProviderLogin>` buttons, the `"or continue with email"` divider,
+  `handleProviderSignIn`, `pendingCloudChoice`, and orphaned OAuth icon/button
+  imports while keeping `onProviderSignIn` optional on `AuthPanelProps` so
+  `app/auth/page.tsx` compiles untouched.
+- **Effect**: `/auth` renders a clean email-and-password sign-in, sign-up, and
+  password-recovery form (preserving the local-only cloud sync opt-out checkbox)
+  without broken third-party OAuth buttons against a GoTrue instance that has no
+  OAuth client credentials configured.
+- **Why not configuration**: `AuthPanel.tsx` hardcodes all four `<ProviderLogin>`
+  buttons unconditionally without querying GoTrue's enabled providers or any
+  environment flag.
+- **Tests**: `src/__tests__/components/auth/AuthPanelCloudChoiceRace.test.tsx`
+  asserts none of the four OAuth buttons or the `"or continue with email"`
+  divider render while email/password submission and cloud-sync opt-out
+  persistence continue working.
+- **Conflict risk**: **low.** Self-contained JSX and handler cleanup in
+  `AuthPanel.tsx`.
+- **When it breaks**: upstream adds a fifth OAuth button or restructures
+  `AuthPanel.tsx`. Re-apply by keeping only the email/password form, recovery
+  flow, and cloud-choice checkbox while leaving `onProviderSignIn` optional on
+  `AuthPanelProps`.
+- **Status**: applied
+
 ---
 
 ## Part 3 — Resolved decisions
