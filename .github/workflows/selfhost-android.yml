@@ -54,7 +54,7 @@ jobs:
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
         with:
-          targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
+          targets: aarch64-linux-android
 
       - name: Rust cache
         uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
@@ -82,9 +82,10 @@ jobs:
         id: version
         run: echo "PACKAGE_VERSION=$(jq -r .version apps/readest-app/package.json)" >> "$GITHUB_ENV"
 
-      - name: Build Android APKs
+      - name: Build Android APK
         env:
           NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/28.2.13676358
+          ORG_GRADLE_PROJECT_penFlavor: booxPen
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
           ANDROID_KEY_BASE64: ${{ secrets.ANDROID_KEY_BASE64 }}
@@ -113,17 +114,12 @@ jobs:
           echo "Building version $version"
 
           apk_path="src-tauri/gen/android/app/build/outputs/apk/universal/release"
-          universal_apk="Readest_${version}_universal.apk"
           arm64_apk="Readest_${version}_arm64.apk"
-
-          pnpm tauri android build
-          cp "${apk_path}/app-universal-release.apk" "${universal_apk}"
 
           pnpm tauri android build -t aarch64
           cp "${apk_path}/app-universal-release.apk" "${arm64_apk}"
 
-          ls -lh "${universal_apk}" "${arm64_apk}"
-          echo "universal_apk=${universal_apk}" >> "$GITHUB_ENV"
+          ls -lh "${arm64_apk}"
           echo "arm64_apk=${arm64_apk}" >> "$GITHUB_ENV"
 
       - name: Upload APKs to release
@@ -132,15 +128,13 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           cd apps/readest-app
-          gh release upload "${{ github.event.release.tag_name }}" "${{ env.universal_apk }}" "${{ env.arm64_apk }}" --clobber
-          echo "Uploaded ${{ env.universal_apk }} and ${{ env.arm64_apk }}"
+          gh release upload "${{ github.event.release.tag_name }}" "${{ env.arm64_apk }}" --clobber
+          echo "Uploaded ${{ env.arm64_apk }}"
 
       - name: Upload APK artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: apk-${{ env.PACKAGE_VERSION }}
-          path: |
-            apps/readest-app/Readest_*_universal.apk
-            apps/readest-app/Readest_*_arm64.apk
+          path: apps/readest-app/Readest_*_arm64.apk
           if-no-files-found: error
           retention-days: 7
