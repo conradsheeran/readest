@@ -638,6 +638,40 @@ flipping their master switches, which is P1.
   permission/App-Link/OAuth deletions.
 - **Status**: applied
 
+### P18 — Disable Android Auto across all flavors and unmount the car-media runtime bridge
+
+- **Target**: `apps/readest-app/src-tauri/gen/android/app/build.gradle.kts`,
+  `apps/readest-app/src-tauri/gen/android/app/src/main/AndroidManifest.xml`, and
+  `apps/readest-app/src/components/Providers.tsx`
+- **Change**: set `manifestPlaceholders["carAppMetaName"]` unconditionally to
+  `"com.bilingify.readest.androidauto.withheld"` across every store flavor in
+  `app/build.gradle.kts` (instead of withholding
+  `com.google.android.gms.car.application` only for `googleplay`), update the
+  `carAppMetaName` comment in `AndroidManifest.xml` to match unconditional
+  withholding across all flavors, and remove the `CarMediaLibraryBridge`
+  import and `<CarMediaLibraryBridge />` mount from `Providers.tsx` while
+  leaving `src/components/CarMediaLibraryBridge.tsx` and its exported pure
+  helpers intact.
+- **Effect**: Android Auto never discovers the self-hosted APK regardless of
+  flavor, and client boot never registers car-media selection listeners,
+  computes library projections, or calls `syncCarMediaLibrary` on the native
+  bridge.
+- **Why not configuration**: `foss` flavor previously advertised
+  `com.google.android.gms.car.application` unconditionally in Gradle, and
+  `Providers.tsx` mounted `<CarMediaLibraryBridge />` unconditionally at root.
+- **Tests**: `src/__tests__/android/android-auto-declarations.test.ts` verifies
+  `carAppMetaName` is unconditionally withheld across all flavors and that
+  `Providers.tsx` does not reference or mount `CarMediaLibraryBridge`, while
+  `src/__tests__/components/CarMediaLibraryBridge.test.ts` continues passing
+  against the preserved pure helper exports.
+- **Conflict risk**: **low.** One Gradle placeholder assignment and one root JSX
+  line removal.
+- **When it breaks**: upstream refactors `carAppMetaName` in `build.gradle.kts`
+  or moves `<CarMediaLibraryBridge />` out of `Providers.tsx`. Re-apply by
+  ensuring no flavor emits `com.google.android.gms.car.application` and the
+  bridge component is not mounted.
+- **Status**: applied
+
 ---
 
 ## Part 3 — Resolved decisions

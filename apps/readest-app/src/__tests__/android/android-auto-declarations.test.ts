@@ -52,28 +52,30 @@ describe('Android Auto declarations (#3919)', () => {
   });
 
   /**
-   * Play's Auto review rejected version code 11020 ("Audio inconsistently
-   * plays on the Android Auto environment") and blocked the whole release
-   * (#5038, #5235). Android Auto ships to the FOSS/GitHub builds while the Play
-   * build withholds the declaration, so a Play submission is never routed
-   * through Auto review until the car audio path is validated on hardware.
+   * Self-hosted builds withhold the Android Auto declaration across all store
+   * flavors (including `foss`), resolving `carAppMetaName` unconditionally to an
+   * inert placeholder so the APK never advertises an automotive media service.
    */
-  it('withholds the car declaration from the Google Play flavor only', () => {
+  it('withholds the car declaration across all store flavors in selfhost builds', () => {
     const placeholder = appGradle.slice(
       appGradle.indexOf('manifestPlaceholders["carAppMetaName"]'),
       appGradle.indexOf('signingConfigs'),
     );
-    expect(placeholder).toContain('storeFlavor == "googleplay"');
-    expect(placeholder).toContain('com.google.android.gms.car.application');
-    // The googleplay branch must resolve to something Android never reads.
-    const googlePlayBranch = placeholder.slice(0, placeholder.indexOf('} else {'));
-    expect(googlePlayBranch).not.toContain('com.google.android.gms.car.application');
-
-    const releaseScript = readFileSync(
-      resolve(process.cwd(), 'scripts/release-google-play.sh'),
-      'utf-8',
+    expect(placeholder).toContain(
+      'manifestPlaceholders["carAppMetaName"] = "com.bilingify.readest.androidauto.withheld"',
     );
-    expect(releaseScript).toContain('storeFlavor=googleplay');
+    expect(placeholder).not.toContain('storeFlavor == "googleplay"');
+    expect(placeholder).not.toContain('com.google.android.gms.car.application');
+    expect(appGradle).not.toContain('com.google.android.gms.car.application');
+  });
+
+  it('does not import or mount CarMediaLibraryBridge in Providers.tsx while keeping helper exports intact', () => {
+    const providers = readFileSync(resolve(process.cwd(), 'src/components/Providers.tsx'), 'utf-8');
+    expect(providers).not.toContain('CarMediaLibraryBridge');
+
+    expect(carMediaBridge).toContain('export const MAX_CAR_MEDIA_BOOKS');
+    expect(carMediaBridge).toContain('export const getCarMediaLibraryBooks');
+    expect(carMediaBridge).toContain('export const getCarMediaPlaybackSourceKey');
   });
 
   it('keeps the automotive descriptor with the media capability for re-enabling', () => {
